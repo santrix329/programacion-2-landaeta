@@ -453,6 +453,255 @@ void crearProducto(Tienda* tienda) {
 
     cout << "Edicion cancelada. No se modifico nada." << endl;
 }
+void actualizarStockManual(Tienda* tienda) { 
+if (tienda->numProductos == 0) { // Verifica si el arreglo dinámico tiene elementos antes de procesar
+cout << "\n[!] No hay productos registrados." << endl;
+return;
+}
+int idB;
+cout << "Ingrese ID del producto: "; cin >> idB;
+int idx = -1; // Usamos idx igual a -1 para saber si encontramos el producto o no
+for (int i = 0; i < tienda->numProductos; i++) { // Este ciclo recorre el arreglo buscando el ID que el usuario escribió
+if (tienda->productos[i].id == idB) { idx = i; break; }
+}
+if (idx == -1) { cout << "No encontrado." << endl; return; }
+cout << "Producto: " << tienda->productos[idx].nombre << endl;
+cout << "Stock actual: " << tienda->productos[idx].stock << endl;
+int aj;
+cout << "Cantidad a sumar (ej: 10) o restar (ej: -5): "; cin >> aj;
+if (tienda->productos[idx].stock + aj < 0) { // Esta es una validacion de seguridad para no tener stock negativo
+cout << "Error: El stock no puede ser menor a cero." << endl;
+} else {
+tienda->productos[idx].stock += aj;
+cout << "Stock actualizado con exito." << endl;
+}
+}
+void listarProductos(Tienda* tienda) {
+    if (tienda->numProductos == 0) {
+        cout << "\n[!] No hay productos registrados." << endl;
+        return;
+    }
+
+    cout << "\n========================================================================================" << endl;
+    cout << "                         LISTADO DE PRODUCTOS                             " << endl;
+    cout << "========================================================================================" << endl;
+    cout << " ID |   Codigo   |       Nombre       |   Proveedor  |  Precio  |  Stock |    Fecha    " << endl;
+    cout << "----------------------------------------------------------------------------------------" << endl;
+
+    for (int i = 0; i < tienda->numProductos; i++) {
+        // Buscamos el nombre del proveedor usando su ID
+        const char* nombreProv = "Desconocido";
+        for(int j = 0; j < tienda->numProveedores; j++) {
+            if(tienda->proveedores[j].id == tienda->productos[i].idProveedor) {
+                nombreProv = tienda->proveedores[j].nombre;
+                break;
+            }
+        } // Usamos la estructura de datos para imprimir cada campo del producto actual
+        // tienda->productos[i] accede al producto en la posición i del arreglo dinámico
+        cout << setw(3) << tienda->productos[i].id << " | "
+             << setw(10) << tienda->productos[i].codigo << " | "
+             << setw(18) << tienda->productos[i].nombre << " | "
+             << setw(12) << nombreProv << " | "
+             << setw(8) << fixed << setprecision(2) << tienda->productos[i].precio << " | "
+             << setw(6) << tienda->productos[i].stock << " | "
+             << tienda->productos[i].fechaRegistro << endl;
+    } // setw(num) se usa para reservar un espacio fijo de caracteres para el siguiente dato que se va a imprimir
+    cout << "========================================================================================" << endl;
+    cout << "Total de productos: " << tienda->numProductos << endl;
+}
+
+void eliminarProducto(Tienda* tienda) {
+if (tienda->numProductos == 0) {
+cout << "\n[!] No hay productos para eliminar." << endl;
+return;
+}
+int idB;
+cout << "ID del producto a eliminar: "; cin >> idB;
+int idx = -1;
+for (int i = 0; i < tienda->numProductos; i++) { // Buscamos en qué posición del arreglo se encuentra el ID solicitado
+if (tienda->productos[i].id == idB) { idx = i; break; }
+}
+if (idx == -1) { cout << "No encontrado." << endl; return; }
+for (int i = idx; i < tienda->numProductos - 1; i++) { // Movemos un elemento a la izquierda para sobreescribir el producto que queremos eliminar
+tienda->productos[i] = tienda->productos[i+1];
+}
+tienda->numProductos--; // Al reducir numProductos, el programa ignorará la última casilla duplicada, dejando el arreglo limpio y con un espacio libre al final.
+cout << "Producto eliminado de la base de datos." << endl;
+}
+
+void redimensionarProveedores(Tienda* tienda) {
+int nuevaCapacidad = tienda->capacidadProveedores * 2;
+Proveedor* nuevoArreglo = new Proveedor[nuevaCapacidad];
+
+}
+void crearProveedor(Tienda* tienda) {
+if (tienda->numProveedores == tienda->capacidadProveedores) { // Verificamos si el numero de proveedores llegó al límite de la capacidad actual
+int nCap = tienda->capacidadProveedores * 2;
+Proveedor* nArr = new Proveedor[nCap]; // Creamos un nuevo arreglo temporal en la memoria heap con el doble de tamaño
+for (int i = 0; i < tienda->numProveedores; i++) { nArr[i] = tienda->proveedores[i]; }
+delete[] tienda->proveedores; // Liberamos la memoria del arreglo viejo para evitar fugas
+tienda->proveedores = nArr;
+tienda->capacidadProveedores = nCap;
+}
+int p = tienda->numProveedores; // Usamos 'p' como un índice auxiliar para escribir en la primera casilla libre
+cout << "Nombre del Proveedor: "; cin.ignore(); cin.getline(tienda->proveedores[p].nombre, 100); // Limpiamos el buffer para que getline no se salte la entrada
+cout << "RIF: "; cin >> tienda->proveedores[p].rif;
+cout << "Email: "; cin >> tienda->proveedores[p].email;
+tienda->proveedores[p].id = tienda->siguienteIdProveedor++; // Asignamos el ID autoincremental y luego lo aumentamos para el siguiente registro
+tienda->numProveedores++; // Incrementamos el contador de proveedores activos en la tienda
+cout << "Proveedor registrado con ID: " << tienda->proveedores[p].id << endl;
+
+}
+void buscarProveedor(Tienda* tienda) {
+if (tienda->numProveedores == 0) {
+cout << "\n[!] No hay proveedores registrados." << endl;
+return;
+}
+char nombreB[100];
+cout << "Ingrese nombre del proveedor a buscar: ";
+cin.ignore(); cin.getline(nombreB, 100); // Limpiamos el buffer y usamos getline para permitir nombres con espacios
+bool hallado = false; // Usamos una variable booleana como señal para saber si encontramos algo
+for (int i = 0; i < tienda->numProveedores; i++) {
+if (strstr(tienda->proveedores[i].nombre, nombreB) != NULL) { // Función strstr: Busca la cadena 'nombreB' dentro del nombre del proveedor actual. Si devuelve algo distinto a NULL, significa que hubo una coincidencia
+cout << "ID: " << tienda->proveedores[i].id << " | Nombre: " << tienda->proveedores[i].nombre << " | RIF: " << tienda->proveedores[i].rif << endl;
+hallado = true;
+}
+}
+if (!hallado) cout << "No se encontraron coincidencias." << endl;
+}
+
+void actualizarProveedor(Tienda* tienda) {
+int idB;
+cout << "ID del proveedor a editar: "; cin >> idB;
+int idx = -1;
+for (int i = 0; i < tienda->numProveedores; i++) { // Comparamos el ID ingresado con los IDs guardados en el arreglo dinámico
+if (tienda->proveedores[i].id == idB) { idx = i; break; } // Guardamos la ubicación exacta en la memoria
+}
+if (idx == -1) { cout << "Proveedor no existe." << endl; return; }
+cout << "Nuevo nombre: "; cin.ignore(); // Al tener el índice (idx), podemos acceder directamente a los campos de ese proveedor
+cin.getline(tienda->proveedores[idx].nombre, 100); // Limpiamos el salto de línea anterior para poder usar getline
+cout << "Nuevo RIF: "; cin >> tienda->proveedores[idx].rif;
+cout << "Datos actualizados." << endl;
+}
+
+void menuProveedores(Tienda* tienda) {
+int op;
+do {
+cout << "\n--- GESTION DE PROVEEDORES ---" << endl;
+cout << "1. Registrar Proveedor\n2. Buscar Proveedor\n3. Actualizar Proveedor\n0. Volver\nSeleccione: ";
+cin >> op;
+if (op == 1) crearProveedor(tienda);
+if (op == 2) buscarProveedor(tienda);
+if (op == 3) actualizarProveedor(tienda);
+} while (op != 0);
+}
+
+void eliminarProveedor(Tienda* tienda) {
+if (tienda->numProveedores == 0) {
+cout << "\n[!] No hay proveedores registrados para eliminar." << endl;
+return;
+}
+
+}
+void redimensionarClientes(Tienda* tienda) {
+int nuevaCap = tienda->capacidadClientes * 2;
+Cliente* nuevoArreglo = new Cliente[nuevaCap];
+
+}
+void crearCliente(Tienda* tienda) {
+if (tienda->numClientes == tienda->capacidadClientes) {
+int nCap = tienda->capacidadClientes * 2;
+Cliente* nArr = new Cliente[nCap];
+for (int i = 0; i < tienda->numClientes; i++) { nArr[i] = tienda->clientes[i]; } // Copiamos uno a uno los clientes existentes al nuevo espacio de memoria
+delete[] tienda->clientes;
+tienda->clientes = nArr;
+tienda->capacidadClientes = nCap; // Reasignamos el puntero de la tienda hacia la nueva dirección de memoria
+}
+int p = tienda->numClientes; // Usamos el valor actual de numClientes como índice para la nueva inserción
+cout << "Nombre del Cliente: "; cin.ignore(); cin.getline(tienda->clientes[p].nombre, 100);
+cout << "Cedula: "; cin >> tienda->clientes[p].cedula;
+cout << "Email: "; cin >> tienda->clientes[p].email;
+tienda->clientes[p].id = tienda->siguienteIdCliente++; // Asignamos el ID autoincremental que lleva el control global de la tienda
+tienda->numClientes++; // Incrementamos el contador total de clientes registrados
+cout << "Cliente registrado con ID: " << tienda->clientes[p].id << endl;
+}
+
+void buscarCliente(Tienda* tienda) {
+if (tienda->numClientes == 0) {
+cout << "\n[!] No hay clientes registrados." << endl;
+return;
+}
+char ced[20];
+cout << "Ingrese Cedula del cliente: "; cin >> ced;
+for (int i = 0; i < tienda->numClientes; i++) {
+if (strcmp(tienda->clientes[i].cedula, ced) == 0) { // Función strcmp: compara la cédula ingresada con la guardada en el arreglo
+cout << "Cliente: " << tienda->clientes[i].nombre << " | ID: " << tienda->clientes[i].id << endl; // Si lo encontramos, mostramos la información y usamos 'return'
+return;
+}
+}
+cout << "Cliente no encontrado." << endl;
+}
+
+void actualizarCliente(Tienda* tienda) {
+int idB;
+cout << "ID del cliente a editar: "; cin >> idB;
+for (int i = 0; i < tienda->numClientes; i++) {
+if (tienda->clientes[i].id == idB) { // Verificamos si el ID de la posición actual coincide con el buscado
+cout << "Nuevo nombre: "; cin.ignore(); // Limpiamos el buffer para que getline lea el nombre completo
+cin.getline(tienda->clientes[i].nombre, 100);
+cout << "Nueva Cedula: "; cin >> tienda->clientes[i].cedula;
+cout << "Actualizado correctamente." << endl; // Una vez actualizados los campos, informamos y salimos de la función
+return;
+}
+}
+cout << "ID no encontrado." << endl;
+}
+
+void listarClientes(Tienda* tienda) {
+if (tienda->numClientes == 0) {
+cout << "No hay clientes para mostrar." << endl;
+return;
+}
+cout << endl << "ID | NOMBRE | CEDULA | EMAIL" << endl; // Imprimimos una línea de títulos para identificar cada columna de la información
+for (int i = 0; i < tienda->numClientes; i++) {
+cout << tienda->clientes[i].id << " | " << tienda->clientes[i].nombre << " | " << tienda->clientes[i].cedula << " | " << tienda->clientes[i].email << endl;
+} // tienda->clientes[i] representa el registro específico en cada vuelta del ciclo
+}
+
+void menuClientes(Tienda* tienda) {
+int opcion = -1;
+do {
+cout << endl << "--- MENU GESTION DE CLIENTES ---" << endl;
+cout << "1. Registrar Nuevo Cliente" << endl;
+cout << "2. Buscar Cliente (Cedula)" << endl;
+cout << "3. Actualizar Datos" << endl;
+cout << "4. Listar Todos los Clientes" << endl;
+cout << "0. Volver al Menu Principal" << endl;
+cout << "Seleccione: ";
+cin >> opcion;
+
+switch (opcion) {
+case 1:
+crearCliente(tienda);
+break;
+case 2:
+buscarCliente(tienda);
+break;
+case 3:
+actualizarCliente(tienda);
+break;
+case 4:
+listarClientes(tienda);
+break;
+case 0:
+cout << "Regresando..." << endl;
+break;
+default:
+cout << "Opcion no valida." << endl;
+break;
+}
+} while (opcion != 0);
+}
 
 int main() {
     
@@ -461,41 +710,47 @@ int main() {
 
     inicializarTienda(&miTienda, "La Bodeguita 2.0", "J-12345678-9");
 
-    int opcionPrincipal;
-    do {
-        cout << "\n========== GESTION DE PRODUCTOS ==========" << endl;
-        cout << "1. Registrar Producto" << endl;
-        cout << "2. Buscar Producto" << endl;
-        cout << "3. Actualizar Producto" << endl;
-        cout << "4. Eliminar Producto" << endl;
-        cout << "0. Salir del Sistema" << endl;
-        cout << "Seleccione una opcion: ";
-        cin >> opcionPrincipal;
-
-        switch (opcionPrincipal) {
-            case 1:
-                crearProducto(&miTienda); 
-                break;
-            case 2:
-                buscarProducto(&miTienda); 
-                break;
-            case 3:
-                actualizarProducto(&miTienda); 
-                break;
-            case 4:
-                
-                cout << "Proximamente: Eliminar Producto..." << endl; 
-                break;
-            case 0:
-                cout << "Cerrando sistema... ¡Hasta luego!" << endl;
-                break;
-            default:
-                cout << "Opcion no valida, intente de nuevo." << endl;
-        }
-    } while (opcionPrincipal != 0);
-
-    liberarTienda(&miTienda);
+    int opcionPrincipal=-1;
     
-    return 0;
-    
+     do {
+cout << endl << "========== MENU PRINCIPAL ==========" << endl;
+cout << "1. Modulo de Productos" << endl;
+cout << "2. Modulo de Proveedores" << endl;
+cout << "3. Modulo de Clientes" << endl;
+cout << "0. Salir del Sistema" << endl;
+cout << "Seleccione una opcion: ";
+cin >> opcionPrincipal;
+switch (opcionPrincipal) {
+case 1: {
+int opP = -1;
+do {
+cout << endl << "--- GESTION DE PRODUCTOS ---" << endl;
+cout << "1. Registrar 2. Buscar 3. Editar" << endl;
+cout << "4. Stock 5. Eliminar 6. Listar 0. Volver" << endl;
+cout << "Seleccione: "; cin >> opP;
+if(opP == 1) crearProducto(&miTienda);
+else if(opP == 2) buscarProducto(&miTienda);
+else if(opP == 3) actualizarProducto(&miTienda);
+else if(opP == 4) actualizarStockManual(&miTienda);
+else if(opP == 5) eliminarProducto(&miTienda);
+else if(opP == 6) listarProductos(&miTienda);
+} while (opP != 0);
+break;
+}
+case 2:
+menuProveedores(&miTienda);
+break;
+case 3:
+menuClientes(&miTienda);
+break;
+case 0:
+cout << "Cerrando sistema..." << endl;
+break;
+default:
+cout << "Opcion no valida." << endl;
+break;
+}
+} while (opcionPrincipal != 0);
+liberarTienda(&miTienda);
+return 0;
 }
