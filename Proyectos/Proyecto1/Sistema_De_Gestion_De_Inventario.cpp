@@ -138,6 +138,36 @@ void liberarTienda(Tienda* tienda) {
 }
 
 /*
+ * convertir a Minusculas
+ * Recorre la cadena y transforma cada caracter a su equivalente en minuscula.
+ */
+void convertirAMinusculas(char* cadena) {
+    for (int i = 0; cadena[i]; i++) {
+        cadena[i] = tolower(cadena[i]);
+    }
+}
+
+/*
+ * contieneSubstring
+ * Retorna true si la cadena 'busqueda' se encuentra dentro de 'texto',
+ * ignorando mayusculas/minusculas si se usa junto con convertirAMinusculas.
+ */
+bool contieneSubstring(const char* texto, const char* busqueda) {
+    return strstr(texto, busqueda) != nullptr;
+}
+
+/*
+ * obtenerFechaActual
+ * Obtiene la fecha del sistema y la guarda en el buffer en formato YYYY-MM-DD.
+ */
+void obtenerFechaActual(char* buffer) {
+    time_t t = time(0);
+    struct tm* now = localtime(&t);
+    // strftime formatea la fecha y la guarda en el char*
+    strftime(buffer, 11, "%Y-%m-%d", now);
+}
+
+/*
  * Busca un producto por su identificador unico y devuelve su posicion
  * en el arreglo. Retorna -1 si no se encuentra el registro.
  */
@@ -183,11 +213,13 @@ bool validarEmail(const char* email) {
 }
 
 /*
- * aqui se verifica que la cadena tenga formato YYYY-MM-DD 
+ * validarFecha
+ * Verifica que la cadena tenga el formato YYYY/MM/DD.
  */
 bool validarFecha(const char* fecha) {
     if (strlen(fecha) != 10) return false;
-    if (fecha[4] != '-' || fecha[7] != '-') return false;
+    // Validamos que tenga las barras en el lugar correcto
+    if (fecha[4] != '/' || fecha[7] != '/') return false; 
     return true;
 }
 
@@ -275,10 +307,23 @@ void redimensionarProductos(Tienda* tienda) {
  */
 void crearProducto(Tienda* tienda) {
     char respuestaConfirmacion;
-    cout <<"Desea registrar un nuevo producto? (S/N): ";
-    cin >> respuestaConfirmacion;
+    
+    // Ciclo de validacion
+    while (true) {
+        cout << "Desea registrar un nuevo producto? (S/N): ";
+        cin >> respuestaConfirmacion;
 
-    if(respuestaConfirmacion == 'N' || respuestaConfirmacion == 'n') {
+        // Convertimos a minuscula para facilitar la comparacion
+        respuestaConfirmacion = tolower(respuestaConfirmacion);
+
+        if (respuestaConfirmacion == 's' || respuestaConfirmacion == 'n') {
+            break; // Entrada valida, salimos del bucle
+        }
+
+        cout << "Opcion no valida, ingresa 'S' para si o 'N' para no." << endl;
+    }
+
+    if (respuestaConfirmacion == 'n') {
         cout << "Registro de producto cancelado" << endl;
         return;
     }
@@ -361,6 +406,7 @@ void crearProducto(Tienda* tienda) {
     char guardarPermanente;
     cout << "\n Desea guardar este producto permanentemente? (S/N): ";
     cin >> guardarPermanente;
+    system("cls"); 
 
     if (guardarPermanente == 'S' || guardarPermanente == 's') {
 
@@ -380,9 +426,7 @@ void crearProducto(Tienda* tienda) {
         tienda->productos[indiceNuevo].idProveedor = idProveedorAsociado;
         
         // Fecha automática 
-        time_t tiempoActual = time(0);
-        tm* fechaEstructura = localtime(&tiempoActual);
-        strftime(tienda->productos[indiceNuevo].fechaRegistro, 11, "%Y/%m/%d", fechaEstructura);
+        obtenerFechaActual(tienda->productos[indiceNuevo].fechaRegistro);
 
         tienda->numProductos++;
 
@@ -394,42 +438,38 @@ void crearProducto(Tienda* tienda) {
     }
 }
 
- /*
+/*
  * buscarProductosPorNombre
- * Retorna un arreglo dinamico con los indices de los productos.
- * Ahora convierte todo a minusculas para que la busqueda funcione
- * aunque el usuario escriba en MAYUSCULAS.
+ * Retorna un arreglo dinámico con los índices de los productos que coinciden.
  */
 int* buscarProductosPorNombre(Tienda* tienda, const char* nombre, int* numResultados) {
     *numResultados = 0;
-
-    //  Convertimos el termino de busqueda a minusculas
     char busquedaMin[100];
     strcpy(busquedaMin, nombre);
-    for(int i = 0; busquedaMin[i]; i++) busquedaMin[i] = tolower(busquedaMin[i]);
+    convertirAMinusculas(busquedaMin);
 
-    // Contamos coincidencias convirtiendo el nombre del producto tambien
+    // Primer conteo
     for (int i = 0; i < tienda->numProductos; i++) {
         char nombreProdMin[100];
         strcpy(nombreProdMin, tienda->productos[i].nombre);
-        for(int j = 0; nombreProdMin[j]; j++) nombreProdMin[j] = tolower(nombreProdMin[j]);
+        convertirAMinusculas(nombreProdMin);
 
-        if (strstr(nombreProdMin, busquedaMin) != nullptr) {
+        if (contieneSubstring(nombreProdMin, busquedaMin)) {
             (*numResultados)++;
         }
     }
 
     if (*numResultados == 0) return nullptr;
 
-    //  Reservamos memoria y llenamos el arreglo
+    // Reserva y llenado
     int* indices = new int[*numResultados];
     int k = 0;
     for (int i = 0; i < tienda->numProductos; i++) {
         char nombreProdMin[100];
         strcpy(nombreProdMin, tienda->productos[i].nombre);
-        for(int j = 0; nombreProdMin[j]; j++) nombreProdMin[j] = tolower(nombreProdMin[j]);
+        convertirAMinusculas(nombreProdMin);
 
-        if (strstr(nombreProdMin, busquedaMin) != nullptr) {
+        if (contieneSubstring(nombreProdMin, busquedaMin)) {
             indices[k] = i;
             k++;
         }
@@ -546,6 +586,7 @@ void buscarProducto(Tienda* tienda) {
             cout << "Opcion no valida." << endl;
             break;
     } 
+    system("pause");
 }
 
 void actualizarProducto(Tienda* tienda) {
@@ -773,13 +814,27 @@ Proveedor* nuevoArreglo = new Proveedor[nuevaCapacidad];
  */
 void crearProveedor(Tienda* tienda) {
     char respuestaConfirmar;
-    cout << "Desea registrar un nuevo proveedor? (S/N): ";
-    cin >> respuestaConfirmar;
-    if (respuestaConfirmar == 'N' || respuestaConfirmar == 'n') {
-        cout << "Registro de proveedor cancelado." << endl;
-        return;
+    bool opcionValida = false;
+
+    // Ciclo de validacion: No deja pasar al usuario hasta que responda bien
+    while (!opcionValida) {
+        cout << "\n Desea registrar un nuevo proveedor? (S/N): ";
+        cin >> respuestaConfirmar;
+
+        // Convertimos a minuscula para que sea mas facil comparar
+        respuestaConfirmar = tolower(respuestaConfirmar);
+
+        if (respuestaConfirmar == 's' || respuestaConfirmar == 'n') {
+            opcionValida = true;
+        } else {
+            cout << " Opcion no valida,  ingresa 'S' para si o 'N' para no." << endl;
+        }
     }
 
+    if (respuestaConfirmar == 'n') {
+        cout << " Registro de proveedor cancelado." << endl;
+        return;
+    }
     char rifIngresado[20];
     cout << "Ingrese el RIF del proveedor o escriba (cancelar): ";
     cin >> rifIngresado;
@@ -883,26 +938,36 @@ void buscarProveedor(Tienda* tienda) {
             break;
         }
 
-        case 2: { // Buscar por nombre (parcial)
-            char nombreB[100];
-            cout << "Ingrese el nombre (o parte del nombre): ";
-            cin.ignore();
-            cin.getline(nombreB, 100);
-            
-            bool hallado = false;
-            for (int i = 0; i < tienda->numProveedores; i++) {
-                if (strstr(tienda->proveedores[i].nombre, nombreB) != NULL) {
-                    cout << "ID: " << tienda->proveedores[i].id 
-                         << " | Nombre: " << tienda->proveedores[i].nombre 
-                         << " | RIF: " << tienda->proveedores[i].rif << endl;
-                    hallado = true;
-                }
-            }
-            if (!hallado) cout << "No se encontraron coincidencias por nombre." << endl;
-            break;
-        }
+        case 2: { // Buscar por nombre parcial e insensible a mayusculas
+    char nombreB[100];
+    cout << "Ingrese el nombre (o parte del nombre): ";
+    cin.ignore();
+    cin.getline(nombreB, 100);
+    
+    // Normalizamos la búsqueda del usuario
+    convertirAMinusculas(nombreB); 
 
-        case 3: { // Buscar por RIF
+    bool hallado = false;
+    for (int i = 0; i < tienda->numProveedores; i++) {
+        // Creamos una copia temporal del nombre del proveedor para no alterar el original
+        char nombreProvMin[100];
+        strcpy(nombreProvMin, tienda->proveedores[i].nombre);
+        convertirAMinusculas(nombreProvMin);
+
+        // Usamos la nueva función booleana
+        if (contieneSubstring(nombreProvMin, nombreB)) {
+            cout << "ID: " << tienda->proveedores[i].id 
+                 << " | Nombre: " << tienda->proveedores[i].nombre 
+                 << " | RIF: " << tienda->proveedores[i].rif << endl;
+            hallado = true;
+        }
+    }
+    if (!hallado) cout << "No se encontraron coincidencias por nombre." << endl;
+    break;
+}
+
+      
+  case 3: { // Buscar por RIF
             char rifB[20];
             cout << "Ingrese el RIF a buscar: ";
             cin >> rifB;
@@ -1653,7 +1718,7 @@ void buscarTransacciones(Tienda* tienda) {
     cout << "2. Por ID de Producto" << endl;
     cout << "3. Por ID de Cliente" << endl;
     cout << "4. Por ID de Proveedor" << endl;
-    cout << "5. Por Fecha (DD/MM/YYYY)" << endl;
+    cout << "5. Por Fecha (YYYY/MM/DD)" << endl;
     cout << "6. Por Tipo (COMPRA/VENTA)" << endl;
     cout << "0. Regresar" << endl;
     cout << "Seleccione una opcion: ";
@@ -1759,24 +1824,34 @@ void buscarTransacciones(Tienda* tienda) {
             }
             break;
 
-        case 5: // BUSCAR POR FECHA
-            cout << "Ingrese la fecha (DD/MM/YYYY): ";
-            cin >> filtroTexto;
-            cout << "\nID   | TIPO   | PROD | RELAC. | CANT | TOTAL | FECHA" << endl;
-            cout << "------------------------------------------------------" << endl;
-            for (int i = 0; i < tienda->numTransacciones; i++) {
-                if (strcmp(tienda->transacciones[i].fecha, filtroTexto) == 0) {
-                    cout << tienda->transacciones[i].id << " | " 
-                         << tienda->transacciones[i].tipo << " | "
-                         << tienda->transacciones[i].idProducto << " | "
-                         << tienda->transacciones[i].idRelacionado << " | "
-                         << tienda->transacciones[i].cantidad << " | "
-                         << tienda->transacciones[i].total << " | "
-                         << tienda->transacciones[i].fecha << endl;
-                    encontrado = true;
-                }
-            }
-            break;
+        case 5: { // BUSCAR POR FECHA
+    char fechaHoy[11];
+    obtenerFechaActual(fechaHoy); 
+
+    cout << "\n--- BUSQUEDA POR FECHA ---" << endl;
+    cout << "Ingrese la fecha (YYYY/MM/DD): ";
+    cin >> filtroTexto;
+
+    // AQUÍ LA METEMOS: Validación de seguridad
+    if (!validarFecha(filtroTexto)) {
+        cout << " Error, El formato de fecha es incorrecto (Debe ser YYYY/MM/DD)." << endl;
+        break; // Sale del caso y vuelve al menú
+    }
+
+    cout << "\nID   | TIPO   | TOTAL | FECHA" << endl;
+    cout << "--------------------------------------" << endl;
+    for (int i = 0; i < tienda->numTransacciones; i++) {
+        if (contieneSubstring(tienda->transacciones[i].fecha, filtroTexto)) {
+            cout << tienda->transacciones[i].id << " | " 
+                 << tienda->transacciones[i].tipo << " | "
+                 << tienda->transacciones[i].total << " | "
+                 << tienda->transacciones[i].fecha << endl;
+            encontrado = true;
+        }
+    }
+    break;
+}
+
 
         case 6: // BUSCAR POR TIPO
             cout << "Ingrese el tipo (COMPRA o VENTA): ";
