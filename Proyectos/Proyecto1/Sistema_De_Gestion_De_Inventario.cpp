@@ -110,6 +110,15 @@ void inicializarTienda(Tienda* tienda, const char* nombre, const char* rif) {
     tienda->siguienteIdTransaccion = 1;
 }
 
+// 1. Estructura obligatoria para el control de archivos [cite: 41-46]
+struct ArchivoHeader {
+    int cantidadRegistros;      // Total histórico
+    int proximoID;              // Siguiente ID a asignar
+    int registrosActivos;       // No eliminados
+    int version;                // Control de versión
+};
+
+
 
 /* liberarTienda
  * Libera TODA la memoria dinamica para cumplir
