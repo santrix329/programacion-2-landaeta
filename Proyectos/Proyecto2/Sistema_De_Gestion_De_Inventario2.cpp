@@ -5,91 +5,147 @@
 #include <ctime>
 #include <cstdlib>
 #include <cctype>
-#include <fstream>  
+#include <fstream>
+#include <cstddef>    /* offsetof() */
+#include <climits>    /* INT_MAX, INT_MIN */
 
 using namespace std;
 
+/* ================================================================
+   CODIGOS DE COLOR ANSI (Seccion 6.1 del enunciado)
+   Le indican a la terminal que cambie el color del texto.
+   Formato: \033[ + codigo + m
+   ================================================================ */
+
+#define RST    "\033[0m"    /* Resetea al color por defecto        */
+#define NEG    "\033[1m"    /* Negrita                              */
+#define ROJO   "\033[31m"   /* Errores, advertencias criticas      */
+#define VERDE  "\033[32m"   /* Exito, confirmaciones               */
+#define AMARI  "\033[33m"   /* Datos importantes, preguntas        */
+#define AZUL   "\033[34m"   /* Titulos de menus                    */
+#define MAGEN  "\033[35m"   /* Menu de mantenimiento               */
+#define CIAN   "\033[36m"   /* Etiquetas de campos en pantalla     */
+#define FVRD   "\033[42m"   /* Fondo verde - mensaje de exito      */
+#define FROJ   "\033[41m"   /* Fondo rojo  - error critico         */
+
+/*
+ * ArchivoHeader - va al inicio de cada archivo .bin
+ * Ocupa exactamente 4 * sizeof(int) = 16 bytes.
+ */
+struct ArchivoHeader {
+    int cantidadRegistros;   /* Total historico (incluye borrados)  */
+    int proximoID;           /* ID que tendra el siguiente registro */
+    int registrosActivos;    /* Solo los no eliminados              */
+    int version;             /* Version del formato del archivo     */
+};
+
+/*
+ * Producto - articulo del inventario
+ */
 struct Producto {
-    int id;
-    char codigo[20];
-    char nombre[100];
-    char descripcion[200];
-    int idProveedor;
-    float precio;
-    int stock;
-    
-    // 4. Estadísticas del registro
-    int stockMinimo;                 
-    int totalVendido;                
-    
-    // 5. Metadata de Control Obligatoria
-    bool eliminado;                  
+    int    id;
+    char   codigo[20];
+    char   nombre[100];
+    char   descripcion[200];
+    int    idProveedor;              /* Llave foranea -> proveedores.bin */
+    float  precio;
+    int    stock;
+    int    stockMinimo;              /* Umbral de alerta de stock critico */
+    int    totalVendido;             /* Acumulado historico de ventas     */
+    bool   eliminado;                /* Flag de borrado logico            */
     time_t fechaCreacion;
     time_t fechaUltimaModificacion;
-
-    int historialVentas[50]; 
-    int cantidadVentas;      
+    int    historialVentas[50];      /* IDs de transacciones del producto */
+    int    cantidadVentas;           /* Cuantos slots del historial usados*/
 };
+
+/*
+ * Proveedor - empresa que nos vende mercancia
+ */
 struct Proveedor {
-    int id;
-    char nombre[100];
-    char rif[20];
-    char telefono[20];
-    char email[100];
-    char direccion[200];
-    
-    bool eliminado;               
+    int    id;
+    char   nombre[100];
+    char   rif[20];
+    char   telefono[20];
+    char   email[100];
+    char   direccion[200];
+    bool   eliminado;
     time_t fechaRegistro;
 };
 
+/*
+ * Cliente - persona que nos compra productos
+ */
 struct Cliente {
-    int id;
-    char nombre[100];
-    char cedula[20];
-    char telefono[20];
-    char email[100];
-    char direccion[200];
-    bool eliminado;
+    int    id;
+    char   nombre[100];
+    char   cedula[20];
+    char   telefono[20];
+    char   email[100];
+    char   direccion[200];
+    bool   eliminado;
     time_t fechaRegistro;
-    float totalGastado;
-    
-    int historialTransacciones[50]; 
-    int numTransacciones; // Contador para el historial
+    float  totalGastado;             /* Suma acumulada de todas sus compras   */
+    int    historialTransacciones[50]; /* IDs de ventas vinculadas al cliente */
+    int    numTransacciones;           /* Cuantos slots del historial usados   */
 };
 
+/*
+ * Transaccion - registro de una compra o venta
+ * Soporta multi-producto: hasta 15 productos por operacion.
+ */
 struct Transaccion {
-    int id;                    
-    char tipo[10];            
-    int idRelacionado;        
-    int idsProductos[15];      
-    int cantidades[15];
-    int numItems;              // Cuántos de los 15 espacios estamos usando
-    
-    float totalFactura; 
-    time_t fecha; 
-    char observaciones[200]; 
-    bool eliminado;
+    int    id;
+    char   tipo[10];         /* "COMPRA" o "VENTA"                       */
+    int    idRelacionado;    /* ID del cliente (VENTA) o proveedor (COMPRA)*/
+    int    idsProductos[15]; /* IDs de los productos involucrados         */
+    int    cantidades[15];   /* Cantidad de cada producto                 */
+    int    numItems;         /* Cuantos de los 15 slots se usan           */
+    float  totalFactura;
+    time_t fecha;
+    char   observaciones[200];
+    bool   eliminado;
 };
 
-
+/*
+ * Tienda - datos globales de la empresa (un solo registro en tienda.bin)
+ */
 struct Tienda {
-    char nombre[100];          // Nombre de la tienda
-    char rif[20];              // RIF de la tienda
-    
-    // Ya no guardamos los datos, solo totales para reportes rapidos
-    float ventasTotales;       
+    char  nombre[100];
+    char  rif[20];
+    float ventasTotales;
     float comprasTotales;
-    int totalTransaccionesRealizadas;
-    // Los siguienteId se eliminan (ahora van en el Header de cada archivo).
+    int   totalTransaccionesRealizadas;
 };
+/* 
+   PROTOTIPOS DE FUNCIONES
+   Necesarios porque algunas funciones se llaman entre si antes
+   de estar definidas en el archivo.
+    */
 
-// 1. Estructura obligatoria para el control de archivos
-struct ArchivoHeader {
-    int cantidadRegistros;      // Total histórico
-    int proximoID;              // Siguiente ID a asignar
-    int registrosActivos;       // No eliminados
-    int version;                // Control de versión
-};
+int       buscarIndiceProductoPorID(int id);
+int       buscarIndiceProveedorPorID(int id);
+int       buscarIndiceClientePorID(int id);
+int       buscarIndiceTransaccionPorID(int id);
+Producto  leerProductoPorIndice(int indice);
+Proveedor leerProveedorPorIndice(int indice);
+Cliente   leerClientePorIndice(int indice);
+bool      existeProveedor(int id);
+bool      existeCliente(int id);
+bool      codigoDuplicado(const char* codigo);
+bool      rifDuplicado(const char* rif);
+bool      cedulaDuplicada(const char* cedula);
+void      imprimirProductoDetallado(Producto p);
+void      imprimirProveedorDetallado(Proveedor p);
+void      imprimirClienteDetallado(Cliente c);
+void      imprimirLinea(char c, int ancho);
+void      pausar();
+int       leerEntero(const char* mensaje, int minimo, int maximo);
+float     leerFlotante(const char* mensaje, float minimo);
+void      limpiarBuffer();
+void      actualizarProductoEnDisco(int indice, Producto p);
+void      actualizarProveedorEnDisco(int indice, Proveedor p);
+void      actualizarClienteEnDisco(int indice, Cliente c);
 
 /*
  * Esta funcion se asegura de que el archivo exista. 
@@ -179,34 +235,97 @@ long calcularOffset(int indice, size_t tamanoEstructura) {
 }
 
 /*
- * Recibe un ID (ej: 105) y nos dice en que indice fisico esta (ej: 4).
- * Retorna -1 si el ID no existe en el archivo.
+ 
+ * Parámetros:
+ *   nombreArchivo    -> el archivo a recorrer
+ *   idBuscado        -> el ID que queremos encontrar
+ *   tamanoEstructura -> sizeof(LaEstructura) correspondiente al archivo
+ *   offsetEliminado  -> posición en bytes del campo 'eliminado' dentro
+ *                       de la estructura (calculado con offsetof)
+ *
+ * Retorna: el índice físico (0, 1, 2...) del registro, o -1 si no existe.
+ * -----------------------------------------------------------------------
  */
-int buscarIndicePorID(const char* nombreArchivo, int idBuscado) {
-    ArchivoHeader header = leerHeader(nombreArchivo);
-    Producto p; // Usamos producto como ejemplo
-    ifstream archivo(nombreArchivo, ios::binary);
+int buscarIndice_Generico(const char* nombreArchivo, int idBuscado,
+                          size_t tamanoEstructura, size_t offsetEliminado) {
 
+    ArchivoHeader header = leerHeader(nombreArchivo);
+    ifstream archivo(nombreArchivo, ios::binary);
     if (!archivo) return -1;
 
-    // Recorremos todos los registros que dice el Header que existen
-    for (int i = 0; i < header.cantidadRegistros; i++) {
-        // Saltamos a la posicion del registro 'i'
-        archivo.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
-        
-        // Leemos el registro
-        archivo.read(reinterpret_cast<char*>(&p), sizeof(Producto));
+    // Buffer temporal del tamaño exacto de la estructura del archivo
+    char* buffer = new char[tamanoEstructura];
 
-        // ¿Es este el que buscamos y no esta borrado?
-        if (p.id == idBuscado && !p.eliminado) {
+    for (int i = 0; i < header.cantidadRegistros; i++) {
+
+        // Calculamos la posición exacta del registro i
+        long posicion = sizeof(ArchivoHeader) + (i * tamanoEstructura);
+        archivo.seekg(posicion, ios::beg);
+        archivo.read(buffer, tamanoEstructura);
+
+        // El 'id' SIEMPRE es el primer campo (int) en todas las estructuras
+        int idLeido = *reinterpret_cast<int*>(buffer);
+
+        // El campo 'eliminado' está en distintas posiciones según la estructura;
+        // usamos el offset que nos pasaron como parámetro
+        bool estaEliminado = *reinterpret_cast<bool*>(buffer + offsetEliminado);
+
+        if (idLeido == idBuscado && !estaEliminado) {
+            delete[] buffer;
             archivo.close();
-            return i; // ¡Encontrado! Retornamos el indice 0, 1, 2...
+            return i; // Índice físico encontrado
         }
     }
 
+    delete[] buffer;
     archivo.close();
-    return -1; // No se encontro el ID
+    return -1; // No encontrado
 }
+
+/*
+ * Wrappers específicos por tipo de estructura
+ * -----------------------------------------------------------------------
+ * Cada uno llama a buscarIndice_Generico con el sizeof y offsetof correcto
+ * para su estructura. Esto elimina el riesgo de pasar el tamaño incorrecto.
+ *
+ * offsetof(Struct, campo) calcula automáticamente en bytes dónde vive
+ * el campo dentro de la estructura, sin importar el padding del compilador.
+ * -----------------------------------------------------------------------
+ */
+
+// Para buscar en productos.bin
+int buscarIndiceProductoPorID(int idBuscado) {
+    return buscarIndice_Generico("productos.bin", idBuscado,
+                                 sizeof(Producto),
+                                 offsetof(Producto, eliminado));
+}
+
+// Para buscar en proveedores.bin
+int buscarIndiceProveedorPorID(int idBuscado) {
+    return buscarIndice_Generico("proveedores.bin", idBuscado,
+                                 sizeof(Proveedor),
+                                 offsetof(Proveedor, eliminado));
+}
+
+// Para buscar en clientes.bin
+int buscarIndiceClientePorID(int idBuscado) {
+    return buscarIndice_Generico("clientes.bin", idBuscado,
+                                 sizeof(Cliente),
+                                 offsetof(Cliente, eliminado));
+}
+
+// Para buscar en transacciones.bin
+int buscarIndiceTransaccionPorID(int idBuscado) {
+    return buscarIndice_Generico("transacciones.bin", idBuscado,
+                                 sizeof(Transaccion),
+                                 offsetof(Transaccion, eliminado));
+}
+
+// Para buscar en productos.bin
+int buscarIndiceProductoPorID(int idBuscado) {
+    return buscarIndice_Generico("productos.bin", idBuscado,
+                                 sizeof(Producto),
+                                 offsetof(Producto, eliminado));
 /*
  * convertir a Minusculas
  * Recorre la cadena y transforma cada caracter a su equivalente en minuscula.
