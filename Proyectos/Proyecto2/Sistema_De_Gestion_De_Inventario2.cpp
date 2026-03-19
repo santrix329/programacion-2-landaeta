@@ -234,132 +234,86 @@ bool actualizarHeader(const char* nombreArchivo, ArchivoHeader h) {
     return true;
 }
 
-
-/* ================================================================
-   ACCESO ALEATORIO - CALCULO DE OFFSETS (Seccion 3.2)
-   ================================================================ */
-
-/*
- * calcularOffset
- * Devuelve la posicion exacta en bytes del registro en el indice dado.
- *
- * FORMULA OFICIAL (Seccion 3.2):
- *   offset = sizeof(ArchivoHeader) + (indice * sizeof(Estructura))
- *
- * El indice fisico (0, 1, 2...) es diferente al ID del registro
- * porque los borrados logicos dejan huecos en los IDs pero no
- * en el archivo fisico.
- */
 long calcularOffset(int indice, size_t tamanoEstructura) {
     long bytesDelHeader   = (long)sizeof(ArchivoHeader);
     long bytesHastaElSlot = (long)indice * (long)tamanoEstructura;
     return bytesDelHeader + bytesHastaElSlot;
 }
 
-/*
- * buscarIndice_Generico
- * ==================================================================
- * CORRECCION DEL BUG CRITICO DEL PROYECTO ORIGINAL:
- *
- * El original tenia buscarIndicePorID() que usaba sizeof(Producto)
- * para calcular offsets en TODOS los archivos. Eso esta MAL porque:
- *   sizeof(Proveedor)    != sizeof(Producto)
- *   sizeof(Cliente)      != sizeof(Producto)
- *   sizeof(Transaccion)  != sizeof(Producto)
- *
- * Resultado: cuando se buscaba en proveedores.bin o clientes.bin,
- * los offsets eran matematicamente incorrectos y se leia basura.
- *
- * SOLUCION: esta funcion recibe dos parametros extra:
- *   tamanoEstruc    = sizeof() de la estructura correcta
- *   offsetEliminado = offsetof(Estructura, eliminado)
- *
- * offsetof() de <cstddef> calcula los bytes exactos desde el inicio
- * de la estructura hasta el campo indicado, incluyendo el padding
- * que agrega el compilador entre campos.
- *
- * Retorna: indice fisico (0,1,2...) del registro, o -1 si no existe.
- * ==================================================================
- */
-int buscarIndice_Generico(const char* archivo, int idBuscado,
-                           size_t tamEstruc, size_t offElim) {
+int buscarIndiceProductoPorID(int idBuscado) {
+    ArchivoHeader h = leerHeader("productos.bin");
+    ifstream f("productos.bin", ios::binary);
+    if (!f.is_open()) return -1;
 
-    ArchivoHeader h = leerHeader(archivo);
-
-    if (h.cantidadRegistros == 0) {
-        return -1; /* Archivo vacio, no hay nada que buscar */
-    }
-
-    ifstream f(archivo, ios::binary);
-
-    if (!f.is_open()) {
-        return -1;
-    }
-
-    /*
-     * Usamos un buffer de bytes del tamanio exacto de la estructura.
-     * No podemos declarar una variable de "tipo desconocido" en C++,
-     * pero si podemos reservar la cantidad exacta de bytes en un char[].
-     */
-    char* buf = new char[tamEstruc];
-    int resultado = -1;
-
+    Producto p; // Usamos el struct directamente
     for (int i = 0; i < h.cantidadRegistros; i++) {
+        f.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
+        f.read(reinterpret_cast<char*>(&p), sizeof(Producto));
 
-        long pos = calcularOffset(i, tamEstruc);
-        f.seekg(pos, ios::beg);
-        f.read(buf, tamEstruc);
-
-        if (!f) {
-            break; /* Error de lectura */
-        }
-
-        /*
-         * El campo 'id' siempre es el primer int de la estructura.
-         * Lo pusimos primero a proposito para poder hacer este truco
-         * sin saber el tipo real de la estructura.
-         */
-        int idLeido = *reinterpret_cast<int*>(buf);
-
-        /* El campo 'eliminado' esta en la posicion dada por offElim */
-        bool estaEliminado = *reinterpret_cast<bool*>(buf + offElim);
-
-        if (idLeido == idBuscado && !estaEliminado) {
-            resultado = i;
-            break;
+        if (p.id == idBuscado && !p.eliminado) {
+            f.close();
+            return i;
         }
     }
-
-    delete[] buf;
     f.close();
-
-    return resultado;
+    return -1;
 }
 
-/* Wrappers especificos: cada uno usa el sizeof y offsetof correctos */
+int buscarIndiceProveedorPorID(int idBuscado) {
+    ArchivoHeader h = leerHeader("proveedores.bin");
+    ifstream f("proveedores.bin", ios::binary);
+    if (!f.is_open()) return -1;
 
-int buscarIndiceProductoPorID(int id) {
-    return buscarIndice_Generico("productos.bin", id,
-                                  sizeof(Producto),
-                                  offsetof(Producto, eliminado));
+    Proveedor p; 
+    for (int i = 0; i < h.cantidadRegistros; i++) {
+        f.seekg(calcularOffset(i, sizeof(Proveedor)), ios::beg);
+        f.read(reinterpret_cast<char*>(&p), sizeof(Proveedor));
+
+        if (p.id == idBuscado && !p.eliminado) {
+            f.close();
+            return i;
+        }
+    }
+    f.close();
+    return -1;
 }
 
-int buscarIndiceProveedorPorID(int id) {
-    return buscarIndice_Generico("proveedores.bin", id,
-                                  sizeof(Proveedor),
-                                  offsetof(Proveedor, eliminado));
+int buscarIndiceClientePorID(int idBuscado) {
+    ArchivoHeader h = leerHeader("clientes.bin");
+    ifstream f("clientes.bin", ios::binary);
+    if (!f.is_open()) return -1;
+
+    Cliente c; 
+    for (int i = 0; i < h.cantidadRegistros; i++) {
+        f.seekg(calcularOffset(i, sizeof(Cliente)), ios::beg);
+        f.read(reinterpret_cast<char*>(&c), sizeof(Cliente));
+
+        if (c.id == idBuscado && !c.eliminado) {
+            f.close();
+            return i;
+        }
+    }
+    f.close();
+    return -1;
 }
 
-int buscarIndiceClientePorID(int id) {
-    return buscarIndice_Generico("clientes.bin", id,
-                                  sizeof(Cliente),
-                                  offsetof(Cliente, eliminado));
-}
+int buscarIndiceTransaccionPorID(int idBuscado) {
+    ArchivoHeader h = leerHeader("transacciones.bin");
+    ifstream f("transacciones.bin", ios::binary);
+    if (!f.is_open()) return -1;
 
-int buscarIndiceTransaccionPorID(int id) {
-    return buscarIndice_Generico("transacciones.bin", id,
-                                  sizeof(Transaccion),
-                                  offsetof(Transaccion, eliminado));
+    Transaccion t; 
+    for (int i = 0; i < h.cantidadRegistros; i++) {
+        f.seekg(calcularOffset(i, sizeof(Transaccion)), ios::beg);
+        f.read(reinterpret_cast<char*>(&t), sizeof(Transaccion));
+
+        if (t.id == idBuscado && !t.eliminado) {
+            f.close();
+            return i;
+        }
+    }
+    f.close();
+    return -1;
 }
 
 
