@@ -607,430 +607,593 @@ int registrarTransaccion(Transaccion nueva) {
 
     return nueva.id; /* Retornamos el ID para el historial del cliente */
 }
-
+/* ================================================================
+   FUNCIONES DE UTILIDAD GENERAL
+   ================================================================ */
 
 /*
- * buscarProductosPorNombre
- * Retorna un arreglo dinámico con los índices de los productos que coinciden.
+ * limpiarBuffer
+ * Limpia el buffer de entrada de cin despues de un error.
+ * Sin esto, si el usuario escribe letras donde se espera un numero,
+ * el programa queda en un bucle infinito sin poder leer mas entrada.
  */
-/*
-int* buscarProductosPorNombre(Tienda* tienda, const char* nombre, int* numResultados) {
-    *numResultados = 0;
-    char busquedaMin[100];
-    strcpy(busquedaMin, nombre);
-    convertirAMinusculas(busquedaMin);
-
-    // Primer conteo
-    for (int i = 0; i < tienda->numProductos; i++) {
-        char nombreProdMin[100];
-        strcpy(nombreProdMin, tienda->productos[i].nombre);
-        convertirAMinusculas(nombreProdMin);
-
-        if (contieneSubstring(nombreProdMin, busquedaMin)) {
-            (*numResultados)++;
-        }
-    }
-
-    if (*numResultados == 0) return nullptr;
-
-    // Reserva y llenado
-    int* indices = new int[*numResultados];
-    int k = 0;
-    for (int i = 0; i < tienda->numProductos; i++) {
-        char nombreProdMin[100];
-        strcpy(nombreProdMin, tienda->productos[i].nombre);
-        convertirAMinusculas(nombreProdMin);
-
-        if (contieneSubstring(nombreProdMin, busquedaMin)) {
-            indices[k] = i;
-            k++;
-        }
-    }
-    return indices;
+void limpiarBuffer() {
+    cin.clear();               /* Limpiamos la bandera de error */            //me quedé aquí
+    cin.ignore(INT_MAX, '\n'); /* Descartamos hasta el proximo Enter */
 }
 
+/*
+ * leerEntero
+ * Lee un entero validado. Si el usuario escribe algo invalido
+ * o fuera del rango, pide que repita. Evita crasheos.
+ */
+int leerEntero(const char* mensaje, int minimo, int maximo) {
+    int valor;
+
+    while (true) {
+        cout << mensaje;
+        cin >> valor;
+
+        if (cin.fail()) {
+            cout << ROJO << "  Error: ingrese un numero entero valido."
+                 << RST << endl;
+            limpiarBuffer();
+            continue;
+        }
+
+        limpiarBuffer();
+
+        if (valor < minimo || valor > maximo) {
+            cout << ROJO << "  Error: el valor debe estar entre "
+                 << minimo << " y " << maximo << "."
+                 << RST << endl;
+            continue;
+        }
+
+        return valor;
+    }
+}
+
+/*
+ * leerFlotante
+ * Igual que leerEntero pero para numeros decimales.
+ */
+float leerFlotante(const char* mensaje, float minimo) {
+    float valor;
+
+    while (true) {
+        cout << mensaje;
+        cin >> valor;
+
+        if (cin.fail()) {
+            cout << ROJO << "  Error: ingrese un numero valido." << RST << endl;
+            limpiarBuffer();
+            continue;
+        }
+
+        limpiarBuffer();
+
+        if (valor < minimo) {
+            cout << ROJO << "  Error: el valor no puede ser menor a "
+                 << minimo << "." << RST << endl;
+            continue;
+        }
+
+        return valor;
+    }
+}
+
+/*
+ * convertirAMinusculas
+ * Convierte cada caracter de la cadena a minuscula.
+ * Util para busquedas que no distingan mayusculas de minusculas.
+ */
+void convertirAMinusculas(char* cadena) {
+    for (int i = 0; cadena[i] != '\0'; i++) {
+        cadena[i] = (char)tolower((unsigned char)cadena[i]);
+    }
+}
+
+/*
+ * contieneSubstring
+ * Devuelve true si 'busqueda' aparece dentro de 'texto'.
+ * strstr devuelve un puntero a la primera ocurrencia, o NULL.
+ */
+bool contieneSubstring(const char* texto, const char* busqueda) {
+    if (!texto || !busqueda) {
+        return false;
+    }
+    return strstr(texto, busqueda) != NULL;
+}
+
+/*
+ * obtenerFechaActual
+ * Pone en 'buffer' la fecha del sistema en formato YYYY-MM-DD.
+ * El buffer debe tener al menos 11 caracteres.
+ */
+void obtenerFechaActual(char* buffer) {
+    time_t t        = time(0);
+    struct tm* info = localtime(&t);
+    strftime(buffer, 11, "%Y-%m-%d", info);
+}
+
+/*
+ * validarEmail
+ * Verifica que el email tenga '@' y '.' en posicion valida.
+ */
+bool validarEmail(const char* email) {
+    if (!email || strlen(email) < 5) return false;
+
+    const char* arroba = strchr(email, '@');
+    if (!arroba || arroba == email) return false;
+
+    const char* punto = strchr(arroba, '.');
+    if (!punto || punto == arroba + 1) return false;
+    if (*(punto + 1) == '\0') return false;
+
+    return true;
+}
+
+/*
+ * codigoDuplicado
+ * Busca en productos.bin si ya existe un producto activo con ese codigo.
+ */
+bool codigoDuplicado(const char* cod) {
+    ArchivoHeader h = leerHeader("productos.bin");
+    Producto p;
+
+    ifstream f("productos.bin", ios::binary);
+    if (!f.is_open()) return false;
+
+    for (int i = 0; i < h.cantidadRegistros; i++) {
+        f.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
+        f.read(reinterpret_cast<char*>(&p), sizeof(Producto));
+        if (!p.eliminado && strcmp(p.codigo, cod) == 0) {
+            f.close();
+            return true;
+        }
+    }
+
+    f.close();
+    return false;
+}
+
+/*
+ * rifDuplicado
+ * Verifica si ya hay un proveedor activo con ese RIF.
+ */
+bool rifDuplicado(const char* rif) {
+    ArchivoHeader h = leerHeader("proveedores.bin");
+    Proveedor p;
+
+    ifstream f("proveedores.bin", ios::binary);
+    if (!f.is_open()) return false;
+
+    for (int i = 0; i < h.cantidadRegistros; i++) {
+        f.seekg(calcularOffset(i, sizeof(Proveedor)), ios::beg);
+        f.read(reinterpret_cast<char*>(&p), sizeof(Proveedor));
+        if (!p.eliminado && strcmp(p.rif, rif) == 0) {
+            f.close();
+            return true;
+        }
+    }
+
+    f.close();
+    return false;
+}
+
+/*
+ * cedulaDuplicada
+ * Verifica si ya hay un cliente activo con esa cedula.
+ */
+bool cedulaDuplicada(const char* cedula) {
+    ArchivoHeader h = leerHeader("clientes.bin");
+    Cliente c;
+
+    ifstream f("clientes.bin", ios::binary);
+    if (!f.is_open()) return false;
+
+    for (int i = 0; i < h.cantidadRegistros; i++) {
+        f.seekg(calcularOffset(i, sizeof(Cliente)), ios::beg);
+        f.read(reinterpret_cast<char*>(&c), sizeof(Cliente));
+        if (!c.eliminado && strcmp(c.cedula, cedula) == 0) {
+            f.close();
+            return true;
+        }
+    }
+
+    f.close();
+    return false;
+}
+
+/* Funciones helper que usan los wrappers de busqueda */
+bool existeProveedor(int id) { return buscarIndiceProveedorPorID(id) != -1; }
+bool existeCliente(int id)   { return buscarIndiceClientePorID(id)   != -1; }
+
+
+/* ================================================================
+   FUNCIONES DE IMPRESION CON FORMATO (Seccion 6.1)
+   ================================================================ */
+
+/*
+ * imprimirLinea
+ * Imprime 'ancho' repeticiones del caracter dado y luego un salto.
+ */
+void imprimirLinea(char c, int ancho) {
+    for (int i = 0; i < ancho; i++) cout << c;
+    cout << endl;
+}
+
+/*
+ * imprimirTitulo
+ * Imprime un titulo centrado entre lineas de '=' con colores.
+ */
+void imprimirTitulo(const char* titulo) {
+    cout << endl << AZUL << NEG;
+    imprimirLinea('=', 65);
+
+    int lon = (int)strlen(titulo);
+    int sp  = (63 - lon) / 2;
+    for (int i = 0; i < sp; i++) cout << ' ';
+    cout << titulo << endl;
+
+    imprimirLinea('=', 65);
+    cout << RST;
+}
+
+/*
+ * pausar
+ * Espera que el usuario presione ENTER. Reemplaza system("pause")
+ * para mayor compatibilidad con Linux y Windows.
+ */
+void pausar() {
+    cout << endl << AMARI << "  Presione ENTER para continuar..." << RST;
+    cin.ignore(INT_MAX, '\n');
+    cin.get();
+}
+
+/*
+ * imprimirProductoDetallado (Seccion 6.2 - Practicidad)
+ * Muestra todos los datos de un producto.
+ * En lugar de mostrar solo el ID del proveedor, busca su nombre
+ * en proveedores.bin para que sea mas informativo.
+ */
+void imprimirProductoDetallado(Producto p) {
+
+    /* Buscamos el nombre del proveedor para mostrarlo */
+    char nomProv[100] = "Desconocido";
+    int idxProv = buscarIndiceProveedorPorID(p.idProveedor);
+    if (idxProv != -1) {
+        Proveedor pr = leerProveedorPorIndice(idxProv);
+        strcpy(nomProv, pr.nombre);
+    }
+
+    /* Color del stock segun nivel */
+    const char* colorStock = VERDE;
+    const char* etqStock   = "";
+    if      (p.stock <= p.stockMinimo)     { colorStock = ROJO;  etqStock = " [CRITICO]"; }
+    else if (p.stock <= p.stockMinimo * 2) { colorStock = AMARI; etqStock = " [BAJO]";    }
+
+    cout << CIAN  << "  ID:          " << RST << NEG << p.id  << RST
+         << "    " << CIAN << "Codigo: " << RST << p.codigo   << endl;
+    cout << CIAN  << "  Nombre:      " << RST << NEG << p.nombre << RST << endl;
+    cout << CIAN  << "  Descripcion: " << RST << p.descripcion   << endl;
+    cout << CIAN  << "  Precio:      " << RST << AMARI
+         << "$" << fixed << setprecision(2) << p.precio << RST;
+    cout << "    " << CIAN << "Stock: " << RST
+         << colorStock << p.stock << etqStock << RST;
+    cout << "    " << CIAN << "Minimo: " << RST << p.stockMinimo << endl;
+    cout << CIAN  << "  Proveedor:   " << RST
+         << VERDE << nomProv << RST << "  (ID: " << p.idProveedor << ")" << endl;
+    imprimirLinea('-', 65);
+}
+
+/*
+ * imprimirProveedorDetallado
+ */
+void imprimirProveedorDetallado(Proveedor p) {
+    cout << CIAN  << "  ID:        " << RST << NEG << p.id << RST
+         << "    " << CIAN << "RIF: " << RST << p.rif << endl;
+    cout << CIAN  << "  Nombre:    " << RST << NEG << p.nombre << RST << endl;
+    cout << CIAN  << "  Telefono:  " << RST << p.telefono
+         << "    " << CIAN << "Email: " << RST << p.email << endl;
+    cout << CIAN  << "  Direccion: " << RST << p.direccion << endl;
+    imprimirLinea('-', 65);
+}
+
+/*
+ * imprimirClienteDetallado
+ */
+void imprimirClienteDetallado(Cliente c) {
+    cout << CIAN  << "  ID:            " << RST << NEG << c.id << RST
+         << "    " << CIAN << "Cedula: " << RST << c.cedula << endl;
+    cout << CIAN  << "  Nombre:        " << RST << NEG << c.nombre << RST << endl;
+    cout << CIAN  << "  Telefono:      " << RST << c.telefono
+         << "    " << CIAN << "Email: " << RST << c.email << endl;
+    cout << CIAN  << "  Direccion:     " << RST << c.direccion << endl;
+    cout << CIAN  << "  Total Gastado: " << RST << AMARI
+         << "$" << fixed << setprecision(2) << c.totalGastado << RST;
+    cout << "    " << CIAN << "Transacciones: " << RST << c.numTransacciones << endl;
+    imprimirLinea('-', 65);
+}
+
+
+/* ================================================================
+   MODULO: GESTION DE PRODUCTOS
+   ================================================================ */
+
+/*
+ * crearProducto
+ * Solicita todos los datos, los valida y los guarda en productos.bin.
+ * Mantiene la logica del original (pregunta S/N al inicio, permite
+ * escribir "cancelar" en el nombre, muestra resumen antes de guardar).
+ */
+void crearProducto() {
+
+    /* El original preguntaba S/N antes de empezar */
+    char respInicial;
+    cout << endl << "  Desea registrar un nuevo producto? (S/N): ";
+    cin >> respInicial;
+    limpiarBuffer();
+
+    if (tolower(respInicial) != 's') {
+        cout << AMARI << "  Registro cancelado." << RST << endl;
+        return;
+    }
+
+    Producto nuevo;
+    memset(&nuevo, 0, sizeof(Producto));
+
+    /* ---- NOMBRE ---- */
+    cout << endl;
+    cout << "  Nombre del producto (o escriba 'cancelar'): ";
+    cin.getline(nuevo.nombre, 100);
+
+    if (strcmp(nuevo.nombre, "cancelar") == 0) {
+        cout << AMARI << "  Operacion cancelada." << RST << endl;
+        return;
+    }
+
+    if (strlen(nuevo.nombre) == 0) {
+        cout << ROJO << "  Error: el nombre no puede estar vacio." << RST << endl;
+        return;
+    }
+
+    /* ---- CODIGO (con validacion de duplicados) ---- */
+    bool codigoBueno = false;
+    do {
+        cout << "  Codigo del producto: ";
+        cin >> nuevo.codigo;
+        limpiarBuffer();
+
+        if (strlen(nuevo.codigo) == 0) {
+            cout << ROJO << "  Error: el codigo no puede estar vacio." << RST << endl;
+        } else if (codigoDuplicado(nuevo.codigo)) {
+            cout << ROJO << "  Error: el codigo '" << nuevo.codigo
+                 << "' ya existe. Use otro." << RST << endl;
+        } else {
+            codigoBueno = true;
+        }
+    } while (!codigoBueno);
+
+    /* ---- DESCRIPCION ---- */
+    cout << "  Descripcion: ";
+    cin.getline(nuevo.descripcion, 200);
+
+    /* ---- PRECIO ---- */
+    nuevo.precio = leerFlotante("  Precio (mayor que 0): $", 0.01f);
+
+    /* ---- STOCK ---- */
+    nuevo.stock = leerEntero("  Stock inicial (0 o mas): ", 0, INT_MAX);
+
+    /* ---- STOCK MINIMO ---- */
+    nuevo.stockMinimo = leerEntero("  Stock minimo de alerta: ", 0, INT_MAX);
+
+    /* ---- PROVEEDOR (validando que exista en disco) ---- */
+    bool provBueno = false;
+    do {
+        nuevo.idProveedor = leerEntero("  ID del Proveedor: ", 1, INT_MAX);
+        if (!existeProveedor(nuevo.idProveedor)) {
+            cout << ROJO << "  Error: no existe un proveedor con el ID "
+                 << nuevo.idProveedor << ". Verifique e intente de nuevo."
+                 << RST << endl;
+        } else {
+            provBueno = true;
+        }
+    } while (!provBueno);
+
+    /* Buscamos el nombre del proveedor para mostrarlo en el resumen */
+    int idxProv = buscarIndiceProveedorPorID(nuevo.idProveedor);
+    Proveedor provElegido = leerProveedorPorIndice(idxProv);
+
+    /* ---- RESUMEN ANTES DE GUARDAR ---- */
+    cout << endl;
+    imprimirTitulo("RESUMEN DEL NUEVO PRODUCTO");
+    cout << "  Nombre:       " << NEG << nuevo.nombre << RST << endl;
+    cout << "  Codigo:       " << nuevo.codigo        << endl;
+    cout << "  Descripcion:  " << nuevo.descripcion   << endl;
+    cout << "  Precio:       $" << fixed << setprecision(2) << nuevo.precio << endl;
+    cout << "  Stock:        " << nuevo.stock
+         << "  (minimo de alerta: " << nuevo.stockMinimo << ")" << endl;
+    cout << "  Proveedor:    " << VERDE << provElegido.nombre
+         << RST << "  (ID: " << nuevo.idProveedor << ")" << endl;
+    imprimirLinea('=', 65);
+
+    char guardar;
+    cout << "  Guardar en productos.bin? (S/N): ";
+    cin >> guardar;
+    limpiarBuffer();
+
+    if (tolower(guardar) == 's') {
+        if (registrarProducto(nuevo)) {
+            cout << FVRD << "  Exito: Producto guardado con ID "
+                 << nuevo.id << RST << endl;
+        } else {
+            cout << FROJ << "  Error: no se pudo escribir en el disco."
+                 << RST << endl;
+        }
+    } else {
+        cout << AMARI << "  Producto descartado, no se guardo nada." << RST << endl;
+    }
+}
+//me quede aqui 
 /*
  * buscarProducto
- * Menu principal de busquedas que delega la logica a funciones 
- * especializadas (por ID y por Nombre).
+ * Adaptacion de buscarProducto(Tienda*) y buscarProductosPorNombre(Tienda*)
+ * del original comentado. 4 modos de busqueda, todos leen del archivo.
+ */
+void buscarProducto() {
 
-void buscarProducto(Tienda* tienda) {
-    if (tienda->numProductos == 0) {
-        cout << "\n No hay productos registrados para buscar." << endl;
+    ArchivoHeader h = leerHeader("productos.bin");
+    if (h.registrosActivos == 0) {
+        cout << AMARI << "  No hay productos registrados para buscar." << RST << endl;
         return;
     }
 
-    int opcionBusqueda;
-    cout << "\n========== MENU DE BUSQUEDA ==========" << endl;
-    cout << "1. Buscar por ID (exacto)" << endl;
-    cout << "2. Buscar por nombre (coincidencia parcial)" << endl;
-    cout << "3. Buscar por codigo (coincidencia parcial)" << endl;
-    cout << "4. Listar por proveedor" << endl;
-    cout << "0. Cancelar" << endl;
-    cout << "Seleccione una opcion: ";
-    cin >> opcionBusqueda;
+    imprimirTitulo("MENU DE BUSQUEDA DE PRODUCTOS");
+    cout << "  " << CIAN << "1." << RST << " Buscar por ID (exacto)"           << endl;
+    cout << "  " << CIAN << "2." << RST << " Buscar por nombre (parcial)"       << endl;
+    cout << "  " << CIAN << "3." << RST << " Buscar por codigo (parcial)"       << endl;
+    cout << "  " << CIAN << "4." << RST << " Listar todos los de un proveedor"  << endl;
+    cout << "  " << ROJO  << "0." << RST << " Cancelar"                         << endl;
 
-    if (opcionBusqueda == 0) return;
+    int op = leerEntero("  Seleccione: ", 0, 4);
+    if (op == 0) return;
 
-    switch (opcionBusqueda) {
-        case 1: { // Reutilizando buscarProductoPorId
-            int idBusca;
-            cout << "Ingrese el ID del producto: ";
-            cin >> idBusca;
-            
-            int i = buscarProductoPorId(tienda, idBusca);
+    bool encontrado = false;
+    Producto p;
 
-            if (i != -1) {
-                cout << "\n Producto encontrado:" << endl;
-                cout << "Nombre: " << tienda->productos[i].nombre 
-                     << " | Codigo: " << tienda->productos[i].codigo << endl;
-            } else {
-                cout << "No se encontro ningun producto con ese ID." << endl;
-            }
-            break;
-        }
-
-        case 2: { // Reutilizando buscarProductosPorNombre
-            char busqueda[100];
-            cout << "Ingrese el nombre a buscar: ";
-            cin.ignore(); 
-            cin.getline(busqueda, 100);
-            
-            int numEncontrados = 0;
-            int* resultados = buscarProductosPorNombre(tienda, busqueda, &numEncontrados);
-
-            if (resultados != nullptr) {
-                cout << "\n--- Resultados encontrados (" << numEncontrados << ") ---" << endl;
-                for (int j = 0; j < numEncontrados; j++) {
-                    int idx = resultados[j];
-                    cout << "- ID: " << tienda->productos[idx].id 
-                         << " | " << tienda->productos[idx].nombre << endl;
-                }
-                delete[] resultados; 
-            } else {
-                cout << "No hay coincidencias para ese nombre." << endl;
-            }
-            break;
-        }
-
-        case 3: { // Buscar por codigo (coincidencia parcial)
-            char busqueda[20];
-            cout << "Ingrese el codigo (o parte de el) a buscar: ";
-            cin.ignore();
-            cin.getline(busqueda, 20);
-            
-            for(int i = 0; busqueda[i]; i++) busqueda[i] = tolower(busqueda[i]);
-
-            bool algunResultado = false;
-            for (int i = 0; i < tienda->numProductos; i++) {
-                char codigoProd[20];
-                strcpy(codigoProd, tienda->productos[i].codigo);
-                for(int j = 0; codigoProd[j]; j++) codigoProd[j] = tolower(codigoProd[j]);
-
-                if (strstr(codigoProd, busqueda) != NULL) {
-                    cout << "- ID: " << tienda->productos[i].id << " | Nombre: " << tienda->productos[i].nombre << " | Codigo: " << tienda->productos[i].codigo << endl;
-                    algunResultado = true;
-                }
-            }
-
-            if (!algunResultado) cout << "No hay coincidencias para ese codigo." << endl;
-            break;
-        }
-
-        case 4: { // Listar por proveedor
-            int idProvBusca;
-            cout << "Ingrese el ID del proveedor para filtrar productos: ";
-            cin >> idProvBusca;
-
-            bool encontrado = false;
-            cout << "\n--- Productos del Proveedor ID " << idProvBusca << " ---" << endl;
-            for (int i = 0; i < tienda->numProductos; i++) {
-                if (tienda->productos[i].idProveedor == idProvBusca) {
-                    cout << "- ID: " << tienda->productos[i].id << " | " << tienda->productos[i].nombre << endl;
-                    encontrado = true;
-                }
-            }
-            if (!encontrado) cout << "No se encontraron productos asociados a este proveedor." << endl;
-            break;
-        }
-
-        default:
-            cout << "Opcion no valida." << endl;
-            break;
-    } 
-    system("pause");
-}
-
-void actualizarProducto(Tienda* tienda) {
-    if (tienda->numProductos == 0) {
-        cout << "\n No hay productos para editar." << endl;
-        return;
-    }
-
-    int idABuscar;
-    cout << "\nIngrese el ID del producto que desea modificar: ";
-    cin >> idABuscar;
-
-    // Buscamos en que pueto de la fila está el producto
-    int puestoEncontrado = -1; 
-    for (int i = 0; i < tienda->numProductos; i++) {
-        if (tienda->productos[i].id == idABuscar) {
-            puestoEncontrado = i; // Guardamos el numero de la cajita
-            break;
+    /* ---- OPCION 1: Por ID exacto ---- */
+    if (op == 1) {
+        int id = leerEntero("  ID del producto: ", 1, INT_MAX);
+        int idx = buscarIndiceProductoPorID(id);
+        if (idx != -1) {
+            cout << endl;
+            imprimirProductoDetallado(leerProductoPorIndice(idx));
+            encontrado = true;
         }
     }
 
-    if (puestoEncontrado == -1) {
-        cout << " Error, No existe un producto con ese ID." << endl;
-        return;
-    }
+    /* ---- OPCION 2: Por nombre parcial ----
+     * Adaptacion de buscarProductosPorNombre() del original.
+     * En lugar de arreglo dinamico, leemos directamente del disco. */
+    else if (op == 2) {
+        char busq[100];
+        cout << "  Nombre (o parte del nombre) a buscar: ";
+        cin.getline(busq, 100);
 
-    // cramos un borrador, esto nos permite editar mucho y solo guardar al final 
-    // Esto nos permite editar mucho y solo guardar al final
-    Producto borrador = tienda->productos[puestoEncontrado];
+        if (strlen(busq) == 0) {
+            cout << ROJO << "  Error: el campo no puede estar vacio." << RST << endl;
+            return;
+        }
 
-    int opcion;
+        /* Convertimos la busqueda a minusculas para no distinguir mayusculas */
+        char busqMin[100];
+        strcpy(busqMin, busq);
+        convertirAMinusculas(busqMin);
 
-    do {
-        cout << "\n  EDITANDO PRODUCTO (BORRADOR) " << endl;
-        cout << "Nombre actual: " << borrador.nombre << " | Precio: " << borrador.precio << endl;
-        
-        cout << "1. Codigo\n2. Nombre\n3. Descripcion\n4. ID Proveedor\n5. Precio\n6. Stock\n7. GUARDAR CAMBIOS\n0. CANCELAR" << endl;
-        cout << "Seleccione una opcion: ";
-        cin >> opcion;
+        cout << endl;
+        ifstream f("productos.bin", ios::binary);
+        if (!f.is_open()) {
+            cout << ROJO << "  Error al abrir el archivo." << RST << endl;
+            return;
+        }
 
-        if (opcion == 1) { 
-            cout << "Nuevo Codigo: "; cin >> borrador.codigo; 
-        } else if (opcion == 2) { 
-            cout << "Nuevo Nombre: "; cin.ignore(); cin.getline(borrador.nombre, 100); 
-        } else if (opcion == 3) { 
-            cout << "Nueva Descripcion: "; cin.ignore(); cin.getline(borrador.descripcion, 200); 
-        } else if (opcion == 4) { 
-            cout << "Nuevo ID Proveedor: "; cin >> borrador.idProveedor; 
-        } else if (opcion == 5) { 
-            cout << "Nuevo Precio: "; cin >> borrador.precio; 
-        } else if (opcion == 6) { 
-            cout << "Nuevo Stock: "; cin >> borrador.stock; 
-        } else if (opcion == 7) { 
-            //  Confirmamos antes de guardar
-            char confirmar;
-            cout << "¿Desea aplicar todos los cambios permanentemente? (s/n): ";
-            cin >> confirmar;
-            
-            if (confirmar == 's' || confirmar == 'S') {
-                tienda->productos[puestoEncontrado] = borrador; // Pasamos el borrador a la tienda real
-                cout << " Cambios guardados con exito." << endl;
-                return;
-                 // Salimos de la funcion
+        for (int i = 0; i < h.cantidadRegistros; i++) {
+            f.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
+            f.read(reinterpret_cast<char*>(&p), sizeof(Producto));
+
+            if (p.eliminado) continue;
+
+            /* Copiamos el nombre en minusculas sin alterar el original */
+            char nombreMin[100];
+            strcpy(nombreMin, p.nombre);
+            convertirAMinusculas(nombreMin);
+
+            if (contieneSubstring(nombreMin, busqMin)) {
+                imprimirProductoDetallado(p);
+                encontrado = true;
             }
         }
-    } while (opcion != 0);
-
-    cout << "Edicion cancelada. No se modifico nada." << endl;
-}
-
-/*
- * actualizarStockProducto
- * Permite ajustar el inventario de un producto sumando o restando 
- * unidades. Valida que el stock final no sea negativo.
- 
-void actualizarStockProducto(Tienda* tienda) {
-    if (tienda->numProductos == 0) {
-        cout << "\n No hay productos registrados para ajustar stock" << endl;
-        return;
+        f.close();
     }
 
-    int idB;
-    cout << "\n--- AJUSTE MANUAL DE STOCK ---" << endl;
-    cout << "Ingrese ID del producto: "; 
-    cin >> idB;
+    /* ---- OPCION 3: Por codigo parcial ---- */
+    else if (op == 3) {
+        char busq[20];
+        cout << "  Codigo (o parte del codigo) a buscar: ";
+        cin >> busq;
+        limpiarBuffer();
 
-    //  Buscar producto por ID
-    int i = buscarProductoPorId(tienda, idB);
+        char busqMin[20];
+        strcpy(busqMin, busq);
+        convertirAMinusculas(busqMin);
 
-    if (i == -1) {
-        cout << " Error, Producto no encontrado." << endl;
-        return;
-    }
+        cout << endl;
+        ifstream f("productos.bin", ios::binary);
+        if (!f.is_open()) {
+            cout << ROJO << "  Error al abrir el archivo." << RST << endl;
+            return;
+        }
 
-    // Mostrar stock actual
-    cout << "Producto: " << tienda->productos[i].nombre << endl;
-    cout << "Stock actual: " << tienda->productos[i].stock << endl;
+        for (int i = 0; i < h.cantidadRegistros; i++) {
+            f.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
+            f.read(reinterpret_cast<char*>(&p), sizeof(Producto));
 
-    //  Permitir ajuste manual (+/-)
-    int ajuste;
-    cout << "Cantidad a sumar (ej: 10) o restar (ej: -5): "; 
-    cin >> ajuste;
+            if (p.eliminado) continue;
 
-    // Validar que stock final >= 0
-    if (tienda->productos[i].stock + ajuste < 0) {
-        cout << "  Error, El stock resultante no puede ser menor a cero." << endl;
-    
-    } else {
-        //  Confirmar cambio
-        tienda->productos[i].stock += ajuste;
-        cout << "  Stock actualizado con exito. Nuevo total: " 
-             << tienda->productos[i].stock << endl;
-    }
-}
+            char codMin[20];
+            strcpy(codMin, p.codigo);
+            convertirAMinusculas(codMin);
 
-void listarProductos(Tienda* tienda) {
-
-    if (tienda->numProductos == 0) {
-        cout << "\n No hay productos registrados." << endl;
-        return;
-    }
-
-    cout << "\n========================================================================================" << endl;
-    cout << "                         LISTADO DE PRODUCTOS                             " << endl;
-    cout << "========================================================================================" << endl;
-    cout << " ID |   Codigo   |       Nombre       |   Proveedor  |  Precio  |  Stock |    Fecha    " << endl;
-    cout << "----------------------------------------------------------------------------------------" << endl;
-
-    for (int i = 0; i < tienda->numProductos; i++) {
-        // Buscamos el nombre del proveedor usando su ID
-        const char* nombreProv = "Desconocido";
-
-        for(int j = 0; j < tienda->numProveedores; j++) {
-            if(tienda->proveedores[j].id == tienda->productos[i].idProveedor) {
-                nombreProv = tienda->proveedores[j].nombre;
-                break;
+            if (contieneSubstring(codMin, busqMin)) {
+                imprimirProductoDetallado(p);
+                encontrado = true;
             }
-        } // Usamos la estructura de datos para imprimir cada campo del producto actual
-        // tienda->productos[i] accede al producto en la posición i del arreglo dinámico
-        
-        cout << setw(3) << tienda->productos[i].id << " | "
-             << setw(10) << tienda->productos[i].codigo << " | "
-             << setw(18) << tienda->productos[i].nombre << " | "
-             << setw(12) << nombreProv << " | "
-             << setw(8) << fixed << setprecision(2) << tienda->productos[i].precio << " | "
-             << setw(6) << tienda->productos[i].stock << " | "
-             << tienda->productos[i].fechaRegistro << endl;
-    } // setw(num) se usa para reservar un espacio fijo de caracteres para el siguiente dato que se va a imprimir
-    cout << "========================================================================================" << endl;
-    cout << "Total de productos: " << tienda->numProductos << endl;
-    
-}
-
-/*
- * eliminarProducto
- * Localiza un producto por ID y solicita confirmacion. Si la entrada
- * no es exactamente '1', la operacion se cancela por seguridad.
- 
-void eliminarProducto(Tienda* tienda) {
-    if (tienda->numProductos == 0) {
-        cout << "\n No hay productos para eliminar." << endl;
-        return;
-    }
-
-    int idB;
-    cout << "\n--- ELIMINAR PRODUCTO ---" << endl;
-    cout << "ID del producto a eliminar: "; 
-    cin >> idB;
-
-    int idx = buscarProductoPorId(tienda, idB);
-
-    if (idx == -1) { 
-        cout << " Error, Producto no encontrado." << endl; 
-        return; 
-    }
-
-    cout << "\n Producto: " << tienda->productos[idx].nombre << endl;
-    cout << " Esta accion no se puede deshacer." << endl;
-    
-    int confirmar;
-    cout << " ¿Confirmar eliminacion? (1: SI / 0: NO): ";
-    cin >> confirmar;
-
-    if (confirmar == 1) {
-        // Lógica de mover elementos
-        for (int i = idx; i < tienda->numProductos - 1; i++) {
-            tienda->productos[i] = tienda->productos[i + 1];
         }
-        tienda->numProductos--;
-        cout << "  Producto eliminado exitosamente" << endl;
-    } 
-    else if (confirmar == 0) {
-        cout << " Operacion cancelada por el usuario" << endl;
-    } 
-    else {
-        // Si mete cualquier otro numero o letras, entra aqui
-        cout << "  Opcion no valida, Operacion cancelada por seguridad" << endl;
+        f.close();
     }
-}
 
+    /* ---- OPCION 4: Listar por proveedor ---- */
+    else if (op == 4) {
+        int idProv = leerEntero("  ID del proveedor a filtrar: ", 1, INT_MAX);
 
-void redimensionarProveedores(Tienda* tienda) {
-int nuevaCapacidad = tienda->capacidadProveedores * 2;
-Proveedor* nuevoArreglo = new Proveedor[nuevaCapacidad];
-
-    // Mudas los datos del arreglo viejo al nuevo 
-    for (int i = 0; i < tienda->numProveedores; i++) {
-        nuevoArreglo[i] = tienda->proveedores[i];
-    }
-    
-     // Liberamos la memoria del arreglo viejo para evitar fugas
-    delete[] tienda->proveedores;
-
-    //  Decirle a la tienda dónde está su nueva casa
-    tienda->proveedores = nuevoArreglo;
-    tienda->capacidadProveedores = nuevaCapacidad;
-    
-    cout << " Capacidad de proveedores aumentada a " << nuevaCapacidad << " ---" << endl;
-
-}
-
-/*
- * Registro un nuevo proveedor validando que el RIF no este duplicado,
- * y que el email sea valido 
-*/
-void crearProveedor() {
-    Proveedor p;
-    cout << "\n--- REGISTRAR PROVEEDOR ---" << endl;
-    
-    cout << "Nombre de la empresa: ";
-    cin.ignore();
-    cin.getline(p.nombre, 100);
-    
-    cout << "RIF: "; 
-    cin.getline(p.rif, 20);
-    
-    cout << "Telefono: ";
-    cin.getline(p.telefono, 20);
-    
-    // Usamos la funcion booleana validarEmail
-    do {
-        cout << "Email: ";
-        cin.getline(p.email, 100);
-        if (!validarEmail(p.email)) {
-            cout << "Error, formato de email invalido. Intente de nuevo." << endl;
+        if (!existeProveedor(idProv)) {
+            cout << ROJO << "  Error: no existe ese proveedor." << RST << endl;
+            return;
         }
-    } while (!validarEmail(p.email));
-    
-    cout << "Direccion: ";
-    cin.getline(p.direccion, 200);
-    
-    p.eliminado = false;
-    p.fechaRegistro = time(0);
 
-    fstream archivo("proveedores.bin", ios::binary | ios::in | ios::out);
-    ArchivoHeader h;
-    archivo.read(reinterpret_cast<char*>(&h), sizeof(ArchivoHeader));
+        int idxPr = buscarIndiceProveedorPorID(idProv);
+        Proveedor pr = leerProveedorPorIndice(idxPr);
 
-    p.id = h.proximoID;
-    
-    archivo.seekp(0, ios::end);
-    archivo.write(reinterpret_cast<char*>(&p), sizeof(Proveedor));
+        cout << endl << AZUL << "  Productos del proveedor: "
+             << NEG << pr.nombre << RST << endl << endl;
 
-    h.cantidadRegistros++;
-    h.proximoID++;
-    
-    archivo.seekp(0, ios::beg);
-    archivo.write(reinterpret_cast<char*>(&h), sizeof(ArchivoHeader));
-    
-    archivo.close();
-    cout << "Proveedor registrado con ID: " << p.id << endl;
+        ifstream f("productos.bin", ios::binary);
+        if (!f.is_open()) {
+            cout << ROJO << "  Error al abrir el archivo." << RST << endl;
+            return;
+        }
+
+        for (int i = 0; i < h.cantidadRegistros; i++) {
+            f.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
+            f.read(reinterpret_cast<char*>(&p), sizeof(Producto));
+
+            if (!p.eliminado && p.idProveedor == idProv) {
+                imprimirProductoDetallado(p);
+                encontrado = true;
+            }
+        }
+        f.close();
+    }
+
+    if (!encontrado) {
+        cout << AMARI << "  No se encontraron resultados para esa busqueda."
+             << RST << endl;
+    }
 }
+
+
 /*
  * buscarProveedor
  * Menu interactivo para localizar proveedores por ID, nombre o RIF.
