@@ -148,543 +148,467 @@ void      actualizarProveedorEnDisco(int indice, Proveedor p);
 void      actualizarClienteEnDisco(int indice, Cliente c);
 
 /*
- * Esta funcion se asegura de que el archivo exista. 
- * Si no existe, lo construye con su respectivo Header
+ * inicializarArchivo
+ * Si el archivo no existe, lo crea con un header en cero.
+ * Si ya existe, no hace nada y devuelve true.
  */
 bool inicializarArchivo(const char* nombreArchivo) {
-    
-    ifstream archivoExistente(nombreArchivo, ios::binary);
 
-    if (archivoExistente.good()) {
-        // Elarchivo ya existe, no hacemos nada y retornamos true
-        archivoExistente.close(); 
-        return true; 
-    } 
-    else {
-        //  El archivo no existe, intentamos crearlo con su header inicial
-        archivoExistente.close(); 
-        
-        // Creamos el archivo nuevo (modo escritura binaria)
-        ofstream nuevoArchivo(nombreArchivo, ios::binary);
+    /* Intentamos abrirlo en lectura para ver si existe */
+    ifstream prueba(nombreArchivo, ios::binary);
 
-        if (nuevoArchivo.is_open()) {
-            ArchivoHeader header;
-            header.cantidadRegistros = 0;
-            header.proximoID = 1;
-            header.registrosActivos = 0;
-            header.version = 1;
-
-            // Escribimos los 16 bytes del Header al principio
-            nuevoArchivo.write(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
-            
-            nuevoArchivo.close();
-            return true; // Archivo creado con éxito
-        } 
-        else {
-            // Si por alguna razón (permisos, carpeta llena) no se pudo crear
-            return false; 
-        }
+    if (prueba.good()) {
+        /* Ya existe, cerramos y salimos sin hacer nada */
+        prueba.close();
+        return true;
     }
+    prueba.close();
+
+    /* El archivo no existe, lo creamos con su header inicial */
+    ofstream nuevo(nombreArchivo, ios::binary);
+
+    if (!nuevo.is_open()) {
+        cout << ROJO << "  [ERROR CRITICO] No se pudo crear: "
+             << nombreArchivo << RST << endl;
+        return false;
+    }
+
+    /* Header inicial con todos los contadores en cero */
+    ArchivoHeader h;
+    h.cantidadRegistros = 0;
+    h.proximoID         = 1;   /* IDs arrancan desde 1 */
+    h.registrosActivos  = 0;
+    h.version           = 1;
+
+    nuevo.write(reinterpret_cast<char*>(&h), sizeof(ArchivoHeader));
+    nuevo.close();
+
+    return true;
 }
 
+/*
+ * leerHeader
+ * Abre el archivo y devuelve los primeros 16 bytes como ArchivoHeader.
+ * Si el archivo no existe, lo crea primero.
+ */
 ArchivoHeader leerHeader(const char* nombreArchivo) {
-    ArchivoHeader header = {0, 0}; // Valores por defecto
+
+    /* Valores seguros por defecto */
+    ArchivoHeader h;
+    h.cantidadRegistros = 0;
+    h.proximoID         = 1;
+    h.registrosActivos  = 0;
+    h.version           = 1;
+
     ifstream archivo(nombreArchivo, ios::binary);
 
-    if (!archivo) {
-        // Si el archivo no existe, lo creamos de una vez
-        ofstream nuevo(nombreArchivo, ios::binary);
-        nuevo.write(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
-        nuevo.close();
-        return header; 
+    if (!archivo.is_open()) {
+        inicializarArchivo(nombreArchivo);
+        return h;
     }
 
-    archivo.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
+    archivo.read(reinterpret_cast<char*>(&h), sizeof(ArchivoHeader));
     archivo.close();
-    return header;
+
+    return h;
 }
 
 /*
  * actualizarHeader
- * Sobrescribe unicamente la seccion del header al principio del archivo
+ * Sobrescribe SOLO los primeros 16 bytes del archivo.
+ * Los registros de datos que vienen despues quedan intactos.
  */
-bool actualizarHeader(const char* nombreArchivo, ArchivoHeader header) {
-    // Abrimos en modo binario y entrada/salida (in|out) 
-    // para no borrar lo que ya existe (ios::trunc)
+bool actualizarHeader(const char* nombreArchivo, ArchivoHeader h) {
+
+    /* ios::in|ios::out evita que se borre el contenido del archivo */
     fstream archivo(nombreArchivo, ios::binary | ios::in | ios::out);
 
-    if (!archivo) return false;
-
-    // Saltamos al inicio del archivo
-    archivo.seekp(0, ios::beg);
-    
-    // Sobrescribimos los 16 bytes del header
-    archivo.write(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
-    
-    archivo.close();
-    return true;
-}
-
-/*
- * Calcula la posicion exacta en bytes de un registro segun su indice.
- * El indice 0 es el primer registro que guardaste.
- */
-long calcularOffset(int indice, size_t tamanoEstructura) {
-    // Formula: Saltamos los 16 bytes del Header + (el lugar del registro * su peso)
-    return sizeof(ArchivoHeader) + (indice * tamanoEstructura);
-}
-
-/*
- 
- * Parámetros:
- *   nombreArchivo    -> el archivo a recorrer
- *   idBuscado        -> el ID que queremos encontrar
- *   tamanoEstructura -> sizeof(LaEstructura) correspondiente al archivo
- *   offsetEliminado  -> posición en bytes del campo 'eliminado' dentro
- *                       de la estructura (calculado con offsetof)
- *
- * Retorna: el índice físico (0, 1, 2...) del registro, o -1 si no existe.
- * -----------------------------------------------------------------------
- */
-int buscarIndice_Generico(const char* nombreArchivo, int idBuscado,
-                          size_t tamanoEstructura, size_t offsetEliminado) {
-
-    ArchivoHeader header = leerHeader(nombreArchivo);
-    ifstream archivo(nombreArchivo, ios::binary);
-    if (!archivo) return -1;
-
-    // Buffer temporal del tamaño exacto de la estructura del archivo
-    char* buffer = new char[tamanoEstructura];
-
-    for (int i = 0; i < header.cantidadRegistros; i++) {
-
-        // Calculamos la posición exacta del registro i
-        long posicion = sizeof(ArchivoHeader) + (i * tamanoEstructura);
-        archivo.seekg(posicion, ios::beg);
-        archivo.read(buffer, tamanoEstructura);
-
-        // El 'id' SIEMPRE es el primer campo (int) en todas las estructuras
-        int idLeido = *reinterpret_cast<int*>(buffer);
-
-        // El campo 'eliminado' está en distintas posiciones según la estructura;
-        // usamos el offset que nos pasaron como parámetro
-        bool estaEliminado = *reinterpret_cast<bool*>(buffer + offsetEliminado);
-
-        if (idLeido == idBuscado && !estaEliminado) {
-            delete[] buffer;
-            archivo.close();
-            return i; // Índice físico encontrado
-        }
-    }
-
-    delete[] buffer;
-    archivo.close();
-    return -1; // No encontrado
-}
-
-/*
- * Wrappers específicos por tipo de estructura
- * -----------------------------------------------------------------------
- * Cada uno llama a buscarIndice_Generico con el sizeof y offsetof correcto
- * para su estructura. Esto elimina el riesgo de pasar el tamaño incorrecto.
- *
- * offsetof(Struct, campo) calcula automáticamente en bytes dónde vive
- * el campo dentro de la estructura, sin importar el padding del compilador.
- * -----------------------------------------------------------------------
- */
-
-// Para buscar en productos.bin
-int buscarIndiceProductoPorID(int idBuscado) {
-    return buscarIndice_Generico("productos.bin", idBuscado,
-                                 sizeof(Producto),
-                                 offsetof(Producto, eliminado));
-}
-
-// Para buscar en proveedores.bin
-int buscarIndiceProveedorPorID(int idBuscado) {
-    return buscarIndice_Generico("proveedores.bin", idBuscado,
-                                 sizeof(Proveedor),
-                                 offsetof(Proveedor, eliminado));
-}
-
-// Para buscar en clientes.bin
-int buscarIndiceClientePorID(int idBuscado) {
-    return buscarIndice_Generico("clientes.bin", idBuscado,
-                                 sizeof(Cliente),
-                                 offsetof(Cliente, eliminado));
-}
-
-// Para buscar en transacciones.bin
-int buscarIndiceTransaccionPorID(int idBuscado) {
-    return buscarIndice_Generico("transacciones.bin", idBuscado,
-                                 sizeof(Transaccion),
-                                 offsetof(Transaccion, eliminado));
-}
-
-// Para buscar en productos.bin
-int buscarIndiceProductoPorID(int idBuscado) {
-    return buscarIndice_Generico("productos.bin", idBuscado,
-                                 sizeof(Producto),
-                                 offsetof(Producto, eliminado));
-/*
- * convertir a Minusculas
- * Recorre la cadena y transforma cada caracter a su equivalente en minuscula.
- */
-void convertirAMinusculas(char* cadena) {
-    for (int i = 0; cadena[i]; i++) {
-        cadena[i] = tolower(cadena[i]);
-    }
-}
-
-/*
- * contieneSubstring
- * Retorna true si la cadena 'busqueda' se encuentra dentro de 'texto',
- * ignorando mayusculas/minusculas si se usa junto con convertirAMinusculas.
- */
-bool contieneSubstring(const char* texto, const char* busqueda) {
-    return strstr(texto, busqueda) != nullptr;
-}
-
-/*
- * obtenerFechaActual
- * Obtiene la fecha del sistema y la guarda en el buffer en formato YYYY-MM-DD.
- */
-void obtenerFechaActual(char* buffer) {
-    time_t t = time(0);
-    struct tm* now = localtime(&t);
-    // strftime formatea la fecha y la guarda en el char*
-    strftime(buffer, 11, "%Y-%m-%d", now);
-}
-/*
- * Verificando que el email contenga un @ y al menos un '.' 
- */
-bool validarEmail(const char* email) {
-    const char* arroba = strchr(email, '@');
-    if (arroba == nullptr) return false;
-    const char* punto = strchr(arroba, '.');
-    if (punto == nullptr || punto < arroba) return false;
-    return true;
-
-}
-
-/*
- * Verifica que la cadena tenga el formato YYYY/MM/DD.
- */
-bool validarFecha(const char* fecha) {
-    if (strlen(fecha) != 10) return false;
-    // Validamos que tenga las barras en el lugar correcto
-    if (fecha[4] != '/' || fecha[7] != '/') return false; 
-    return true;
-}
-
-/*
- * codigoDuplicado (Versión Proyecto 2)
- * Busca en productos.bin si el código ya existe.
- */
-bool codigoDuplicado(const char* codigo) {
-    ArchivoHeader h = leerHeader("productos.bin");
-    Producto p;
-    ifstream archivo("productos.bin", ios::binary);
-    if (!archivo) return false;
-
-    for (int i = 0; i < h.cantidadRegistros; i++) {
-        archivo.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
-        archivo.read(reinterpret_cast<char*>(&p), sizeof(Producto));
-        // Solo comparamos si no está eliminado lógicamente
-        if (!p.eliminado && strcmp(p.codigo, codigo) == 0) {
-            archivo.close();
-            return true;
-        }
-    }
-    archivo.close();
-    return false;
-}
-
-/*
- * existeProveedor (Versión Proyecto 2)
- * Verifica si el ID del proveedor existe en proveedores.bin
- */
-bool existeProveedor(int id) {
-    
-    return buscarIndicePorID("proveedores.bin", id) != -1;
-}
-
-/*
- * registrarProducto
- * Guarda un producto al final del archivo y actualiza el conteo global.
- */
-bool registrarProducto(const char* nombreArchivo, Producto nuevo) {
-    
-    ArchivoHeader header = leerHeader(nombreArchivo);
-
-    
-    nuevo.id = header.proximoID;
-    nuevo.eliminado = false;
-
-    fstream archivo(nombreArchivo, ios::binary | ios::in | ios::out);
-    
     if (!archivo.is_open()) {
-        return false; 
-    }
-    long posicionFinal = calcularOffset(header.cantidadRegistros, sizeof(Producto));
-    archivo.seekp(posicionFinal, ios::beg);
-    
-    
-    archivo.write(reinterpret_cast<char*>(&nuevo), sizeof(Producto));
-    archivo.close();
-
-    // Actualizamos los numeros del Header
-    header.cantidadRegistros++; // Sumamos 1 al total
-    header.proximoID++;          // Preparamos el ID para el siguiente
-    header.registrosActivos++;
-
-    // Guardamos el Header actualizado al principio del archivo
-    return actualizarHeader(nombreArchivo, header);
-}
-
-/*Busca el ID, calcula el offset,
- * se posiciona con seekp y marca eliminado = true
- */
-bool eliminarProductoLogico(const char* nombreArchivo, int idABuscar) {
-    // 1. Buscar el indice del registro mediante su ID (Usa la funcion del 3.2)
-    int indice = buscarIndicePorID(nombreArchivo, idABuscar);
-    
-    if (indice == -1) {
-        cout << "Error: No existe un producto con el ID " << idABuscar << endl;
         return false;
     }
 
-    // 2. Calcular su posicion exacta en bytes
-    long offset = calcularOffset(indice, sizeof(Producto));
-
-    // 3. Abrir archivo y posicionar el cursor de escritura (seekp)
-    fstream archivo(nombreArchivo, ios::binary | ios::in | ios::out);
-    if (!archivo) return false;
-
-    // Leemos el registro actual primero para modificar solo el campo necesario
-    Producto p;
-    archivo.seekg(offset, ios::beg);
-    archivo.read(reinterpret_cast<char*>(&p), sizeof(Producto));
-
-    // 4. Escribir la estructura modificada (eliminado = true)
-    p.eliminado = true; // El cambio clave
-    
-    archivo.seekp(offset, ios::beg); // Nos aseguramos de estar en el byte correcto
-    archivo.write(reinterpret_cast<char*>(&p), sizeof(Producto));
-    
+    archivo.seekp(0, ios::beg); /* Inicio absoluto del archivo */
+    archivo.write(reinterpret_cast<char*>(&h), sizeof(ArchivoHeader));
     archivo.close();
-
-    // Actualizamos el Header (Punto 3.1)
-    ArchivoHeader h = leerHeader(nombreArchivo);
-    h.registrosActivos--; 
-    actualizarHeader(nombreArchivo, h);
 
     return true;
 }
 
+
+/* ================================================================
+   ACCESO ALEATORIO - CALCULO DE OFFSETS (Seccion 3.2)
+   ================================================================ */
+
 /*
- * actualizarPrecioProducto: Ubica, salta y sobrescribe con un nuevo precio.
+ * calcularOffset
+ * Devuelve la posicion exacta en bytes del registro en el indice dado.
+ *
+ * FORMULA OFICIAL (Seccion 3.2):
+ *   offset = sizeof(ArchivoHeader) + (indice * sizeof(Estructura))
+ *
+ * El indice fisico (0, 1, 2...) es diferente al ID del registro
+ * porque los borrados logicos dejan huecos en los IDs pero no
+ * en el archivo fisico.
  */
-bool actualizarPrecioProducto(const char* nombreArchivo, int idABuscar, float nuevoPrecio) {
-    int indice = buscarIndicePorID(nombreArchivo, idABuscar);
-    if (indice == -1) return false;
-
-    long offset = calcularOffset(indice, sizeof(Producto));
-    fstream archivo(nombreArchivo, ios::binary | ios::in | ios::out);
-
-    Producto p;
-    archivo.seekg(offset, ios::beg);
-    archivo.read(reinterpret_cast<char*>(&p), sizeof(Producto));
-
-    // Modificamos el dato que el usuario quiere
-    p.precio = nuevoPrecio;
-
-    // Sobrescribimos
-    archivo.seekp(offset, ios::beg);
-    archivo.write(reinterpret_cast<char*>(&p), sizeof(Producto));
-    
-    archivo.close();
-    return true;
+long calcularOffset(int indice, size_t tamanoEstructura) {
+    long bytesDelHeader   = (long)sizeof(ArchivoHeader);
+    long bytesHastaElSlot = (long)indice * (long)tamanoEstructura;
+    return bytesDelHeader + bytesHastaElSlot;
 }
 
 /*
- * Recorre el archivo de principio a fin usando el conteo del Header.
+ * buscarIndice_Generico
+ * ==================================================================
+ * CORRECCION DEL BUG CRITICO DEL PROYECTO ORIGINAL:
+ *
+ * El original tenia buscarIndicePorID() que usaba sizeof(Producto)
+ * para calcular offsets en TODOS los archivos. Eso esta MAL porque:
+ *   sizeof(Proveedor)    != sizeof(Producto)
+ *   sizeof(Cliente)      != sizeof(Producto)
+ *   sizeof(Transaccion)  != sizeof(Producto)
+ *
+ * Resultado: cuando se buscaba en proveedores.bin o clientes.bin,
+ * los offsets eran matematicamente incorrectos y se leia basura.
+ *
+ * SOLUCION: esta funcion recibe dos parametros extra:
+ *   tamanoEstruc    = sizeof() de la estructura correcta
+ *   offsetEliminado = offsetof(Estructura, eliminado)
+ *
+ * offsetof() de <cstddef> calcula los bytes exactos desde el inicio
+ * de la estructura hasta el campo indicado, incluyendo el padding
+ * que agrega el compilador entre campos.
+ *
+ * Retorna: indice fisico (0,1,2...) del registro, o -1 si no existe.
+ * ==================================================================
  */
-void mostrarInventario(const char* nombreArchivo) {
-    ArchivoHeader h = leerHeader(nombreArchivo);
-    Producto p;
-    ifstream archivo(nombreArchivo, ios::binary);
+int buscarIndice_Generico(const char* archivo, int idBuscado,
+                           size_t tamEstruc, size_t offElim) {
 
-    if (!archivo) {
-        cout << "No se pudo abrir el archivo o esta vacio." << endl;
-        return;
+    ArchivoHeader h = leerHeader(archivo);
+
+    if (h.cantidadRegistros == 0) {
+        return -1; /* Archivo vacio, no hay nada que buscar */
     }
 
-    cout << "\n--- LISTA DE PRODUCTOS REGISTRADOS ---" << endl;
-    
-    // Recorremos segun la cantidad de registros que dice el Header
+    ifstream f(archivo, ios::binary);
+
+    if (!f.is_open()) {
+        return -1;
+    }
+
+    /*
+     * Usamos un buffer de bytes del tamanio exacto de la estructura.
+     * No podemos declarar una variable de "tipo desconocido" en C++,
+     * pero si podemos reservar la cantidad exacta de bytes en un char[].
+     */
+    char* buf = new char[tamEstruc];
+    int resultado = -1;
+
     for (int i = 0; i < h.cantidadRegistros; i++) {
-        
-        archivo.seekg(calcularOffset(i, sizeof(Producto)), ios::beg);
-        archivo.read(reinterpret_cast<char*>(&p), sizeof(Producto));
 
-        // Mostramos solo los que no están eliminados logicamente
-        if (!p.eliminado) {
-            cout << "ID: " << p.id 
-                 << " | Codigo: " << p.codigo 
-                 << " | Nombre: " << p.nombre 
-                 << " | Stock: " << p.stock 
-                 << " | Precio: $" << p.precio << endl;
+        long pos = calcularOffset(i, tamEstruc);
+        f.seekg(pos, ios::beg);
+        f.read(buf, tamEstruc);
+
+        if (!f) {
+            break; /* Error de lectura */
+        }
+
+        /*
+         * El campo 'id' siempre es el primer int de la estructura.
+         * Lo pusimos primero a proposito para poder hacer este truco
+         * sin saber el tipo real de la estructura.
+         */
+        int idLeido = *reinterpret_cast<int*>(buf);
+
+        /* El campo 'eliminado' esta en la posicion dada por offElim */
+        bool estaEliminado = *reinterpret_cast<bool*>(buf + offElim);
+
+        if (idLeido == idBuscado && !estaEliminado) {
+            resultado = i;
+            break;
         }
     }
-    archivo.close();
+
+    delete[] buf;
+    f.close();
+
+    return resultado;
 }
 
-void crearProducto() { // Ya no recibe Tienda* porque no usamos la RAM
-    char respuestaConfirmacion;
-    
-    while (true) {
-        cout << "Desea registrar un nuevo producto? (S/N): ";
-        cin >> respuestaConfirmacion;
-        respuestaConfirmacion = tolower(respuestaConfirmacion);
-        if (respuestaConfirmacion == 's' || respuestaConfirmacion == 'n') break;
-        cout << "Opcion no valida, ingresa 'S' para si o 'N' para no." << endl;
-    }
+/* Wrappers especificos: cada uno usa el sizeof y offsetof correctos */
 
-    if (respuestaConfirmacion == 'n') {
-        cout << "Registro de producto cancelado" << endl;
-        return;
-    }
-
-    char nombreIngresado[100];
-    cout << " Ingrese el nombre del producto o escriba (cancelar) para cancelar: "<< endl;
-    cin.ignore();
-    cin.getline(nombreIngresado, 100);
-
-    if(strcmp(nombreIngresado, "cancelar") == 0) return;
-
-    char codigoValidar[20];
-    cout << " Ingrese el codigo del producto: ";
-    cin >> codigoValidar;
-
-    // VALIDACIÓN USANDO EL ARCHIVO
-    if (codigoDuplicado(codigoValidar)) {
-        cout << "Error: El codigo '" << codigoValidar << "' ya existe en el archivo." << endl;
-        return;
-    }
-
-    float precioIngresado;
-    cout << " Ingrese el precio: ";
-    cin >> precioIngresado;
-    if(precioIngresado <= 0) {
-        cout << "Precio no valido. Cancelado." << endl;
-        return;
-    }
-
-    int stockInicial;
-    cout << " Ingrese el stock: ";
-    cin >> stockInicial;
-
-    int idProveedorAsociado;
-    cout <<" Ingrese el ID del proveedor: "<< endl;
-    cin >> idProveedorAsociado;
-    
-    // VALIDACIÓN USANDO EL ARCHIVO
-    if(!existeProveedor(idProveedorAsociado)) {
-        cout << "No existe un proveedor con ese ID en el archivo." << endl;
-        system("pause");
-        return;
-    }
-
-    // --- RESUMEN ---
-    cout << "\n========================================" << endl;
-    cout << "       RESUMEN DEL NUEVO PRODUCTO       " << endl;
-    cout << "========================================" << endl;
-    cout << "Nombre:       " << nombreIngresado << endl;
-    cout << "Codigo:       " << codigoValidar << endl; 
-    cout << "Precio:       " << precioIngresado << endl;
-    cout << "Stock:        " << stockInicial << endl;
-    cout << "ID Proveedor: " << idProveedorAsociado << endl;
-    cout << "========================================" << endl;
-
-    char guardarPermanente;
-    cout << "\n Desea guardar en productos.bin? (S/N): ";
-    cin >> guardarPermanente;
-
-    if (tolower(guardarPermanente) == 's') {
-        // Creamos la estructura temporal para enviar al archivo
-        Producto nuevo;
-        strcpy(nuevo.codigo, codigoValidar);
-        strcpy(nuevo.nombre, nombreIngresado);
-        nuevo.precio = precioIngresado;
-        nuevo.stock = stockInicial;
-        nuevo.idProveedor = idProveedorAsociado;
-        
-        if (registrarProducto("productos.bin", nuevo)) {
-            cout << "Exito, Producto guardado mediante Acceso Aleatorio." << endl;
-        } else {
-            cout << "Error al escribir en el disco" << endl;
-        }
-    }
+int buscarIndiceProductoPorID(int id) {
+    return buscarIndice_Generico("productos.bin", id,
+                                  sizeof(Producto),
+                                  offsetof(Producto, eliminado));
 }
 
-/* --- BLOQUE DE SOPORTE PARA EL PUNTO 4 (ACCESO A DISCO) --- */
+int buscarIndiceProveedorPorID(int id) {
+    return buscarIndice_Generico("proveedores.bin", id,
+                                  sizeof(Proveedor),
+                                  offsetof(Proveedor, eliminado));
+}
 
-/*
- * leerProductoPorIndice
- * Salta a la posición física y extrae el producto completo del .bin
- */
+int buscarIndiceClientePorID(int id) {
+    return buscarIndice_Generico("clientes.bin", id,
+                                  sizeof(Cliente),
+                                  offsetof(Cliente, eliminado));
+}
+
+int buscarIndiceTransaccionPorID(int id) {
+    return buscarIndice_Generico("transacciones.bin", id,
+                                  sizeof(Transaccion),
+                                  offsetof(Transaccion, eliminado));
+}
+
+
+/* ================================================================
+   LECTURA DE REGISTROS POR INDICE FISICO
+   Saltan al byte exacto con seekg y traen solo ese registro.
+   ================================================================ */
+
 Producto leerProductoPorIndice(int indice) {
     Producto p;
-    ifstream archivo("productos.bin", ios::binary);
-    if (archivo) {
-        archivo.seekg(calcularOffset(indice, sizeof(Producto)), ios::beg);
-        archivo.read(reinterpret_cast<char*>(&p), sizeof(Producto));
-        archivo.close();
+    memset(&p, 0, sizeof(Producto)); /* Limpiamos para evitar basura */
+
+    ifstream f("productos.bin", ios::binary);
+    if (f.is_open()) {
+        f.seekg(calcularOffset(indice, sizeof(Producto)), ios::beg);
+        f.read(reinterpret_cast<char*>(&p), sizeof(Producto));
+        f.close();
     }
     return p;
 }
 
-/*
- * leerClientePorIndice
- * Salta a la posición física y extrae el cliente completo del .bin
- */
+Proveedor leerProveedorPorIndice(int indice) {
+    Proveedor p;
+    memset(&p, 0, sizeof(Proveedor));
+
+    ifstream f("proveedores.bin", ios::binary);
+    if (f.is_open()) {
+        f.seekg(calcularOffset(indice, sizeof(Proveedor)), ios::beg);
+        f.read(reinterpret_cast<char*>(&p), sizeof(Proveedor));
+        f.close();
+    }
+    return p;
+}
+
 Cliente leerClientePorIndice(int indice) {
     Cliente c;
-    ifstream archivo("clientes.bin", ios::binary);
-    if (archivo) {
-        archivo.seekg(calcularOffset(indice, sizeof(Cliente)), ios::beg);
-        archivo.read(reinterpret_cast<char*>(&c), sizeof(Cliente));
-        archivo.close();
+    memset(&c, 0, sizeof(Cliente));
+
+    ifstream f("clientes.bin", ios::binary);
+    if (f.is_open()) {
+        f.seekg(calcularOffset(indice, sizeof(Cliente)), ios::beg);
+        f.read(reinterpret_cast<char*>(&c), sizeof(Cliente));
+        f.close();
     }
     return c;
 }
 
-/*
- * actualizarProductoEnDisco
- * Sobrescribe un producto específico (usado para actualizar stock e historial).
- */
+
+/* ================================================================
+   ESCRITURA EN DISCO (actualizacion de registros existentes)
+   Usa seekp para posicionarse en el byte exacto y sobreescribir
+   solo ese registro, sin tocar los demas.
+   ================================================================ */
+
 void actualizarProductoEnDisco(int indice, Producto p) {
-    fstream archivo("productos.bin", ios::binary | ios::in | ios::out);
-    if (archivo) {
-        archivo.seekp(calcularOffset(indice, sizeof(Producto)), ios::beg);
-        archivo.write(reinterpret_cast<char*>(&p), sizeof(Producto));
-        archivo.close();
+    /* Actualizamos la fecha de modificacion antes de guardar */
+    p.fechaUltimaModificacion = time(0);
+
+    fstream f("productos.bin", ios::binary | ios::in | ios::out);
+    if (f.is_open()) {
+        f.seekp(calcularOffset(indice, sizeof(Producto)), ios::beg);
+        f.write(reinterpret_cast<char*>(&p), sizeof(Producto));
+        f.close();
+    } else {
+        cout << ROJO << "  [ERROR] No se pudo abrir productos.bin para guardar."
+             << RST << endl;
     }
 }
 
-/*
- * actualizarClienteEnDisco
- * Sobrescribe un cliente específico (usado para actualizar gastos e historial).
- */
-void actualizarClienteEnDisco(int indice, Cliente c) {
-    fstream archivo("clientes.bin", ios::binary | ios::in | ios::out);
-    if (archivo) {
-        archivo.seekp(calcularOffset(indice, sizeof(Cliente)), ios::beg);
-        archivo.write(reinterpret_cast<char*>(&c), sizeof(Cliente));
-        archivo.close();
+void actualizarProveedorEnDisco(int indice, Proveedor p) {
+    fstream f("proveedores.bin", ios::binary | ios::in | ios::out);
+    if (f.is_open()) {
+        f.seekp(calcularOffset(indice, sizeof(Proveedor)), ios::beg);
+        f.write(reinterpret_cast<char*>(&p), sizeof(Proveedor));
+        f.close();
+    } else {
+        cout << ROJO << "  [ERROR] No se pudo abrir proveedores.bin para guardar."
+             << RST << endl;
     }
 }
+
+void actualizarClienteEnDisco(int indice, Cliente c) {
+    fstream f("clientes.bin", ios::binary | ios::in | ios::out);
+    if (f.is_open()) {
+        f.seekp(calcularOffset(indice, sizeof(Cliente)), ios::beg);
+        f.write(reinterpret_cast<char*>(&c), sizeof(Cliente));
+        f.close();
+    } else {
+        cout << ROJO << "  [ERROR] No se pudo abrir clientes.bin para guardar."
+             << RST << endl;
+    }
+}
+
+
+/* ================================================================
+   REGISTRO DE NUEVOS ELEMENTOS - APPEND (Seccion 3.3)
+
+   Logica de append:
+    1. Leer el header para saber donde va el nuevo slot y que ID asignar
+    2. Calcular offset = sizeof(Header) + (cantidadRegistros * sizeof(Struct))
+    3. Escribir el nuevo registro en ese offset
+    4. Incrementar contadores y guardar el header actualizado
+   ================================================================ */
+
+bool registrarProducto(Producto nuevo) {
+
+    ArchivoHeader h = leerHeader("productos.bin");
+
+    /* Asignamos el ID y los valores que van por defecto */
+    nuevo.id                      = h.proximoID;
+    nuevo.eliminado               = false;
+    nuevo.fechaCreacion           = time(0);
+    nuevo.fechaUltimaModificacion = time(0);
+    nuevo.totalVendido            = 0;
+    nuevo.cantidadVentas          = 0;
+
+    /* Inicializamos el historial de ventas con ceros */
+    for (int i = 0; i < 50; i++) {
+        nuevo.historialVentas[i] = 0;
+    }
+
+    /* Calculamos el offset del siguiente slot disponible */
+    long posNuevo = calcularOffset(h.cantidadRegistros, sizeof(Producto));
+
+    fstream f("productos.bin", ios::binary | ios::in | ios::out);
+    if (!f.is_open()) {
+        cout << ROJO << "  [ERROR] No se pudo abrir productos.bin para registrar."
+             << RST << endl;
+        return false;
+    }
+
+    f.seekp(posNuevo, ios::beg);
+    f.write(reinterpret_cast<char*>(&nuevo), sizeof(Producto));
+    f.close();
+
+    h.cantidadRegistros++;
+    h.proximoID++;
+    h.registrosActivos++;
+
+    return actualizarHeader("productos.bin", h);
+}
+
+bool registrarProveedor(Proveedor nuevo) {
+
+    ArchivoHeader h = leerHeader("proveedores.bin");
+
+    nuevo.id            = h.proximoID;
+    nuevo.eliminado     = false;
+    nuevo.fechaRegistro = time(0);
+
+    long posNuevo = calcularOffset(h.cantidadRegistros, sizeof(Proveedor));
+
+    fstream f("proveedores.bin", ios::binary | ios::in | ios::out);
+    if (!f.is_open()) {
+        cout << ROJO << "  [ERROR] No se pudo abrir proveedores.bin para registrar."
+             << RST << endl;
+        return false;
+    }
+
+    f.seekp(posNuevo, ios::beg);
+    f.write(reinterpret_cast<char*>(&nuevo), sizeof(Proveedor));
+    f.close();
+
+    h.cantidadRegistros++;
+    h.proximoID++;
+    h.registrosActivos++;
+
+    return actualizarHeader("proveedores.bin", h);
+}
+
+/*
+ * registrarCliente
+ * CORRECCIONES vs el original:
+ *  - Guarda TODOS los campos (el original solo guardaba nombre y cedula)
+ *  - Usa la formula de offset, no seekp(0, ios::end)
+ *  - Actualiza registrosActivos en el header (el original no lo hacia)
+ *  - Inicializa el historial de transacciones con ceros
+ */
+bool registrarCliente(Cliente nuevo) {
+
+    ArchivoHeader h = leerHeader("clientes.bin");
+
+    nuevo.id               = h.proximoID;
+    nuevo.eliminado        = false;
+    nuevo.fechaRegistro    = time(0);
+    nuevo.totalGastado     = 0.0f;
+    nuevo.numTransacciones = 0;
+
+    /* Limpiamos el historial de transacciones */
+    for (int i = 0; i < 50; i++) {
+        nuevo.historialTransacciones[i] = 0;
+    }
+
+    long posNuevo = calcularOffset(h.cantidadRegistros, sizeof(Cliente));
+
+    fstream f("clientes.bin", ios::binary | ios::in | ios::out);
+    if (!f.is_open()) {
+        cout << ROJO << "  [ERROR] No se pudo abrir clientes.bin para registrar."
+             << RST << endl;
+        return false;
+    }
+
+    f.seekp(posNuevo, ios::beg);
+    f.write(reinterpret_cast<char*>(&nuevo), sizeof(Cliente));
+    f.close();
+
+    h.cantidadRegistros++;
+    h.proximoID++;
+    h.registrosActivos++;
+
+    return actualizarHeader("clientes.bin", h);
+}
+
+/*
+ * registrarTransaccion
+ * Retorna el ID asignado (necesario para vincularlo al historial del cliente
+ * en el Paso 6 de registrarVentaBinaria). Retorna -1 si fallo.
+ */
+int registrarTransaccion(Transaccion nueva) {
+
+    ArchivoHeader h = leerHeader("transacciones.bin");
+
+    nueva.id        = h.proximoID;
+    nueva.eliminado = false;
+    nueva.fecha     = time(0);
+
+    long posNueva = calcularOffset(h.cantidadRegistros, sizeof(Transaccion));
+
+    fstream f("transacciones.bin", ios::binary | ios::in | ios::out);
+    if (!f.is_open()) {
+        cout << ROJO << "  [ERROR] No se pudo abrir transacciones.bin para registrar."
+             << RST << endl;
+        return -1;
+    }
+
+    f.seekp(posNueva, ios::beg);
+    f.write(reinterpret_cast<char*>(&nueva), sizeof(Transaccion));
+    f.close();
+
+    h.cantidadRegistros++;
+    h.proximoID++;
+    h.registrosActivos++;
+
+    actualizarHeader("transacciones.bin", h);
+
+    return nueva.id; /* Retornamos el ID para el historial del cliente */
+}
+
+
 /*
  * buscarProductosPorNombre
  * Retorna un arreglo dinámico con los índices de los productos que coinciden.
