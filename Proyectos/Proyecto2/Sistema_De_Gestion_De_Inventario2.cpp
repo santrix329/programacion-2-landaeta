@@ -951,6 +951,7 @@ void crearProducto() {
             cout << ROJO << "  Error: no existe un proveedor con el ID "
                  << nuevo.idProveedor << ". Verifique e intente de nuevo."
                  << RST << endl;
+                 return;
         } else {
             provBueno = true;
         }
