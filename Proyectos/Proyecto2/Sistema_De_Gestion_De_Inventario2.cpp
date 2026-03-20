@@ -2717,7 +2717,6 @@ int main() {
         cout << "  ==============================================================" << endl;
         cout << "      SISTEMA DE GESTION DE INVENTARIO  v2.0                   " << endl;
         cout << "      Tienda: La Bodeguita 2.0                                 " << endl;
-        cout << "      Prof. Ing. Kneider  |  URU  |  Programacion 2  |  2026-A " << endl;
         cout << "  ==============================================================" << endl;
         cout << RST << endl;
 
