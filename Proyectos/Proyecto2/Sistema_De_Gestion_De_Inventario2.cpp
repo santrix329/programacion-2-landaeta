@@ -444,7 +444,7 @@ bool registrarProducto(Producto nuevo) {
              << RST << endl;
         return false;
     }
-
+    cout << FVRD << " Registrado con exito. ID asignado:  "  << nuevo.id << RST << endl;
     f.seekp(posNuevo, ios::beg);
     f.write(reinterpret_cast<char*>(&nuevo), sizeof(Producto));
     f.close();
@@ -472,7 +472,7 @@ bool registrarProveedor(Proveedor nuevo) {
              << RST << endl;
         return false;
     }
-
+    cout << FVRD << " Registrado con exito. ID asignado:  "  << nuevo.id << RST << endl;
     f.seekp(posNuevo, ios::beg);
     f.write(reinterpret_cast<char*>(&nuevo), sizeof(Proveedor));
     f.close();
@@ -515,7 +515,7 @@ bool registrarCliente(Cliente nuevo) {
              << RST << endl;
         return false;
     }
-
+    cout << FVRD << " Registrado con exito. ID asignado:  "  << nuevo.id << RST << endl;
     f.seekp(posNuevo, ios::beg);
     f.write(reinterpret_cast<char*>(&nuevo), sizeof(Cliente));
     f.close();
@@ -981,8 +981,7 @@ void crearProducto() {
 
     if (tolower(guardar) == 's') {
         if (registrarProducto(nuevo)) {
-            cout << FVRD << "  Exito: Producto guardado con ID "
-                 << nuevo.id << RST << endl;
+            cout << FVRD << "   Producto guardado " << RST << endl;
         } else {
             cout << FROJ << "  Error: no se pudo escribir en el disco."
                  << RST << endl;
@@ -1521,7 +1520,7 @@ void crearProveedor() {
     cin.getline(nuevo.direccion, 200);
 
     if (registrarProveedor(nuevo)) {
-        cout << FVRD << "  Proveedor registrado con ID: " << nuevo.id << RST << endl;
+        cout << FVRD << "  Proveedor registrado " << RST << endl;
     } else {
         cout << FROJ << "  Error: no se pudo guardar el proveedor." << RST << endl;
     }
@@ -1834,7 +1833,7 @@ void crearCliente() {
     cin.getline(nuevo.direccion, 200);
 
     if (registrarCliente(nuevo)) {
-        cout << FVRD << "  Cliente registrado con ID: " << nuevo.id << RST << endl;
+        cout << FVRD << "  Cliente registrado "<< RST << endl;
     } else {
         cout << FROJ << "  Error: no se pudo guardar el cliente." << RST << endl;
     }
