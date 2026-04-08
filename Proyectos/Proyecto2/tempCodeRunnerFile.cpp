@@ -1,0 +1,1 @@
+fstream f("proveedores.bin", ios::binary | ios::in | ios::out);
