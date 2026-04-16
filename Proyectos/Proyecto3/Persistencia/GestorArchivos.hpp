@@ -2,35 +2,88 @@
 #define GESTOR_ARCHIVOS_HPP
 
 #include <fstream>
+#include <iostream>
 #include "Constantes.hpp"
 
+using namespace std;
+
+// El header se mantiene exactamente igual al Proyecto 2
+struct ArchivoHeader {
+    int cantidadRegistros;   
+    int proximoID;           
+    int registrosActivos;    
+    int version;             
+};
+
 class GestorArchivos {
+private:
+    // Método auxiliar privado
+    static bool inicializarArchivo(const char* nombreArchivo);
+
 public:
-    // Este método es "mágico": T puede ser Producto, Cliente o Proveedor
+    // Métodos normales (implementados en el .cpp)
+    static bool inicializarSistemaArchivos();
+    static ArchivoHeader leerHeader(const char* nombreArchivo);
+    static bool actualizarHeader(const char* nombreArchivo, ArchivoHeader h);
+    static long calcularOffset(int indice, size_t tamanoEstructura);
+
+    // ==============================================================
+    // IMPLEMENTACIÓN DE TEMPLATES (Deben ir en el .hpp)
+    // ==============================================================
+
+    // Guarda un nuevo registro al final del archivo
     template <typename T>
-    static bool guardarRegistro(const char* ruta, const T& objeto) {
-        std::ofstream archivo(ruta, std::ios::binary | std::ios::app);
-        if (!archivo) return false;
+    static bool guardarRegistro(const char* archivo, T& registro) {
+        ArchivoHeader h = leerHeader(archivo);
         
-        archivo.write(reinterpret_cast<const char*>(&objeto), sizeof(T));
-        archivo.close();
+        long posNuevo = calcularOffset(h.cantidadRegistros, sizeof(T));
+
+        fstream f(archivo, ios::binary | ios::in | ios::out);
+        if (!f.is_open()) {
+            return false;
+        }
+
+        f.seekp(posNuevo, ios::beg);
+        f.write(reinterpret_cast<const char*>(&registro), sizeof(T));
+        f.close();
+
+        // Actualizamos los contadores del header
+        h.cantidadRegistros++;
+        h.proximoID++;
+        h.registrosActivos++;
+
+        return actualizarHeader(archivo, h);
+    }
+
+    // Lee un registro específico usando su índice en el archivo
+    template <typename T>
+    static bool leerRegistroPorIndice(const char* archivo, int indice, T& registro) {
+        ifstream f(archivo, ios::binary);
+        if (!f.is_open()) {
+            return false;
+        }
+
+        f.seekg(calcularOffset(indice, sizeof(T)), ios::beg);
+        f.read(reinterpret_cast<char*>(&registro), sizeof(T));
+        f.close();
+        
         return true;
     }
 
-    // Método para leer por índice (también genérico)
+    // Sobreescribe un registro existente en su posición exacta
     template <typename T>
-    static bool leerRegistro(const char* ruta, int indice, T& resultado) {
-        std::ifstream archivo(ruta, std::ios::binary);
-        if (!archivo) return false;
+    static bool actualizarRegistro(const char* archivo, int indice, T& registro) {
+        fstream f(archivo, ios::binary | ios::in | ios::out);
+        if (!f.is_open()) {
+            return false;
+        }
 
-        // Saltamos el Header y llegamos al registro N
-        long offset = sizeof(ArchivoHeader) + (indice * sizeof(T));
-        archivo.seekg(offset, std::ios::beg);
-        archivo.read(reinterpret_cast<char*>(&resultado), sizeof(T));
-        
-        archivo.close();
+        f.seekp(calcularOffset(indice, sizeof(T)), ios::beg);
+        f.write(reinterpret_cast<const char*>(&registro), sizeof(T));
+        f.close();
+
         return true;
     }
 };
 
-#endif
+#endif // GESTOR_ARCHIVOS_HPP
