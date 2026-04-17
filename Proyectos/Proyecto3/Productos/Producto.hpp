@@ -1,28 +1,10 @@
 #ifndef PRODUCTO_HPP
 #define PRODUCTO_HPP
 
-/*
- * ================================================================
- *   SISTEMA DE GESTION DE INVENTARIO  v3.0
- *   productos/Producto.hpp
- *
- *   Declaracion de la clase Producto.
- *   Evolucion del struct Producto del Proyecto 2:
- *     - Atributos privados con getters/setters
- *     - Constructores, destructor y constructor de copia
- *     - Metodos de validacion propios de la entidad
- *     - Metodos de presentacion (mostrarBasico / mostrarCompleto)
- *     - Metodos de gestion del historial de ventas
- *     - Metodo estatico obtenerTamano()
- *
- *   REGLA: Esta clase NO conoce archivos ni menus.
- *          Esa responsabilidad es de GestorArchivos e Interfaz.
- * ================================================================
- */
 
 #include <ctime>
 
-/* Capacidades maximas (igual que el Proyecto 2) */
+
 static const int MAX_HISTORIAL_VENTAS = 50;
 
 class Producto {
@@ -33,14 +15,14 @@ private:
     char   nombre[100];
     char   descripcion[200];
 
-    /* ---- Relacion con proveedor ---- */
-    int    idProveedor;          /* Llave foranea -> proveedores.bin */
+    /* ---- Relacion con proveedor */
+    int    idProveedor;    
 
     /* ---- Datos comerciales ---- */
     float  precio;
     int    stock;
-    int    stockMinimo;          /* Umbral de alerta de stock critico */
-    int    totalVendido;         /* Acumulado historico de ventas     */
+    int    stockMinimo;    
+    int    totalVendido;        
 
     /* ---- Control de ciclo de vida ---- */
     bool   eliminado;            /* Flag de borrado logico            */
@@ -52,14 +34,10 @@ private:
     int    cantidadVentas;       /* Cuantos slots del historial estan ocupados */
 
 public:
-    /* ============================================================
-       CONSTRUCTORES Y DESTRUCTOR
-       ============================================================ */
-
-    /* Constructor por defecto: inicializa todo a cero / vacio */
+    
     Producto();
 
-    /* Constructor parametrizado: campos minimos para crear un producto valido */
+    
     Producto(const char* nombre,
              const char* codigo,
              const char* descripcion,

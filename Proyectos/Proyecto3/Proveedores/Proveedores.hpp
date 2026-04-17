@@ -1,55 +1,52 @@
 #ifndef PROVEEDOR_HPP
 #define PROVEEDOR_HPP
 
-#include <cstddef> // Para size_t
+#include "../Persistencia/Constantes.hpp"
+#include <cstring>
+#include <iostream>
 
 class Proveedor {
 private:
-    int  id;
-    char nombreEmpresa[100];
-    char rif[20]; // Registro de Información Fiscal o Identificación Tributaria
-    char telefono[20];
-    char email[100];
-    char direccion[200];
-    char personaContacto[100];
+    int id;
+    char nombreEmpresa[Constantes::TAM_NOMBRE];
+    char rif[Constantes::TAM_CODIGO];
+    char telefono[Constantes::TAM_TELEFONO];
+    char email[Constantes::TAM_EMAIL];           // <-- Faltaba esto
+    char direccion[Constantes::TAM_DESCRIPCION];
+    char personaContacto[Constantes::TAM_NOMBRE]; // <-- Faltaba esto
     bool eliminado;
 
 public:
-    // Constructores y Destructor
+    // Constructores
     Proveedor();
+    // Este constructor debe tener 6 parámetros de texto para registrarProveedor
     Proveedor(const char* empresa, const char* numRif, const char* tel, const char* mail, const char* dir, const char* contacto);
-    Proveedor(const Proveedor& otro); // Constructor de copia
-    ~Proveedor();
+    Proveedor(const Proveedor& otro); // Constructor copia (lo pide el compilador)
+    ~Proveedor(); // Destructor
 
-    // Getters (constantes)
+    // Getters
     int getId() const;
     const char* getNombreEmpresa() const;
     const char* getRif() const;
-    const char* getTelefono() const;
     const char* getEmail() const;
-    const char* getDireccion() const;
-    const char* getPersonaContacto() const;
     bool isEliminado() const;
 
-    // Setters (retornan bool para confirmar si la asignación fue válida)
-    void setId(int nuevoId);
-    bool setNombreEmpresa(const char* nuevoNombre);
-    bool setRif(const char* nuevoRif);
-    bool setTelefono(const char* nuevoTelefono);
-    bool setEmail(const char* nuevoEmail);
-    bool setDireccion(const char* nuevaDireccion);
-    bool setPersonaContacto(const char* nuevoContacto);
+    // Setters (Cambiados a bool para que coincidan con tus validaciones del .cpp)
+    void setId(int id);
+    bool setNombreEmpresa(const char* nombre);
+    bool setRif(const char* rif);
+    bool setTelefono(const char* tlf);
+    bool setEmail(const char* mail);
+    bool setDireccion(const char* dir);
+    bool setPersonaContacto(const char* contacto);
     void setEliminado(bool estado);
 
-    // Métodos de presentación
+    // Métodos de presentación (Ajustados a los nombres que usas en el resto del código)
     void mostrarInformacionBasica() const;
     void mostrarInformacionCompleta() const;
-
-    // Métodos de validación
+    
     bool esValido() const;
-
-    // Método estático para el GestorArchivos
-    static size_t obtenerTamano();
+    size_t obtenerTamano();
 };
 
-#endif // PROVEEDOR_HPP
+#endif

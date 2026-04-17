@@ -525,7 +525,7 @@ int leerEntero(const char* mensaje, int minimo, int maximo) {
             cout << ROJO << "  Error: el valor debe estar entre "
                  << minimo << " y " << maximo << "."
                  << RST << endl;
-            continue;
+            return 0;
         }
 
         return valor;

@@ -1,230 +1,199 @@
 #include "Interfaz.hpp"
 #include <iostream>
-#include <cstdlib> // Para system("cls") o system("clear")
+#include <iomanip>
 
-// Inclusiones de los módulos de operaciones (Lógica de negocio)
+/* ========================================================================
+    INCLUSIONES DE MÓDULOS DE OPERACIONES
+    Cada archivo .cpp se encarga de la lógica de su dominio.
+   ======================================================================== */
 #include "../productos/operacionesProductos.hpp"
 #include "../proveedores/operacionesProveedores.hpp"
 #include "../clientes/operacionesClientes.hpp"
 #include "../transacciones/operacionesTransacciones.hpp"
-// Asumimos un archivo para operaciones de mantenimiento basado en tu main original
-#include "../persistencia/operacionesMantenimiento.hpp" 
 
-// Utilidades para lectura de datos y formato
+/* UTILIDADES Y PERSISTENCIA */
 #include "../utilidades/Formatos.hpp" 
+#include "../persistencia/GestorArchivos.hpp"
+#include "../tienda/Constantes.hpp"
 
 using namespace std;
+using namespace Constantes; // Uso de constantes globales para colores y rutas
 
-// --- Colores para la consola (ANSI escape codes) ---
-#define RST    "\033[0m"    
-#define NEG    "\033[1m"    
-#define ROJO   "\033[31m"   
-#define VERDE  "\033[32m"   
-#define AMARI  "\033[33m"   
-#define AZUL   "\033[34m"   
-#define MAGEN  "\033[35m"   
-#define CIAN   "\033[36m"   
+/* ========================================================================
+    MÉTODOS DE APOYO VISUAL (Privados)
+   ======================================================================== */
 
-void Interfaz::ejecutar() {
-    Tienda miTienda; // Instancia principal que se pasará a las operaciones
+void Interfaz::mostrarEncabezado(const char* titulo) {
+    Formatos::limpiarPantalla();
+    cout << COLOR_CIAN << COLOR_NEG;
+    cout << "  ==============================================================" << endl;
+    cout << "  " << setfill(' ') << setw(30 + strlen(titulo)/2) << titulo << endl;
+    cout << "  ==============================================================" << endl;
+    cout << COLOR_RST << endl;
+}
+
+/* ========================================================================
+    FLUJO PRINCIPAL DEL SISTEMA
+   ======================================================================== */
+
+void Interfaz::ejecutar(Tienda& tienda) {
     char opcionPrincipal = ' ';
-
+    
     do {
-        system("cls"); // O system("clear") en Linux/Mac
+        mostrarEncabezado("SISTEMA DE GESTION INTEGRAL v3.0");
+        
+        cout << "  " << COLOR_AMARI << "DATOS DE LA TIENDA:" << COLOR_RST << endl;
+        cout << "  Nombre: " << tienda.getNombre() << endl;
+        cout << "  Ubicacion: " << tienda.getDireccion() << endl;
+        cout << "  --------------------------------------------------------------" << endl;
 
-        cout << endl << AZUL << NEG;
-        cout << "  ==============================================================" << endl;
-        cout << "      SISTEMA DE GESTION DE INVENTARIO  v3.0 (POO)             " << endl;
-        cout << "      Tienda: La Bodeguita 2.0                                 " << endl;
-        cout << "  ==============================================================" << endl;
-        cout << RST << endl;
+        cout << "  " << COLOR_CIAN << "1." << COLOR_RST << " Gestion de Inventario (Productos)" << endl;
+        cout << "  " << COLOR_CIAN << "2." << COLOR_RST << " Gestion de Proveedores"           << endl;
+        cout << "  " << COLOR_CIAN << "3." << COLOR_RST << " Cartera de Clientes"              << endl;
+        cout << "  " << COLOR_CIAN << "4." << COLOR_RST << " Ventas y Movimientos"              << endl;
+        cout << "  " << COLOR_CIAN << "5." << COLOR_RST << " Mantenimiento y Reportes"          << endl;
+        cout << "  " << COLOR_ROJO << "6." << COLOR_RST << " Cerrar Sistema y Guardar"         << endl;
 
-        cout << "  " << CIAN  << "1." << RST << " Gestion de Productos"     << endl;
-        cout << "  " << CIAN  << "2." << RST << " Gestion de Proveedores"   << endl;
-        cout << "  " << CIAN  << "3." << RST << " Gestion de Clientes"      << endl;
-        cout << "  " << CIAN  << "4." << RST << " Gestion de Transacciones" << endl;
-        cout << "  " << MAGEN << "5." << RST << " Mantenimiento y Reportes" << endl;
-        cout << "  " << ROJO  << "6." << RST << " Salir del Sistema"        << endl;
-
-        cout << endl << "  Seleccione una opcion: ";
+        cout << endl << COLOR_NEG << "  Seleccione una categoria: " << COLOR_RST;
         cin >> opcionPrincipal;
         Formatos::limpiarBuffer();
 
         switch (opcionPrincipal) {
-            case '1': menuProductos(miTienda); break;
-            case '2': menuProveedores(miTienda); break;
-            case '3': menuClientes(miTienda); break;
-            case '4': menuTransacciones(miTienda); break;
-            case '5': menuMantenimiento(miTienda); break;
+            case '1': menuProductos(tienda); break;
+            case '2': menuProveedores(tienda); break;
+            case '3': menuClientes(tienda); break;
+            case '4': menuTransacciones(tienda); break;
+            case '5': menuMantenimiento(tienda); break;
             case '6':
-                cout << endl << VERDE << NEG << "  Hasta luego! Gracias por usar el sistema." << RST << endl;
+                // Sincronizacion final con el archivo tienda.bin
+                cout << endl << COLOR_AMARI << "  [>] Guardando estado maestro..." << COLOR_RST << endl;
+                if (GestorArchivos::actualizarRegistro<Tienda>(ARCHIVO_TIENDA, 0, tienda)) {
+                    cout << COLOR_VERDE << "  [OK] Sesion cerrada con exito." << COLOR_RST << endl;
+                } else {
+                    cout << COLOR_ROJO << "  [!] Error al guardar metadatos." << COLOR_RST << endl;
+                }
                 break;
             default:
-                cout << endl << ROJO << "  Opcion no valida. Seleccione del 1 al 6." << RST << endl;
+                cout << endl << COLOR_ROJO << "  [!] Opcion invalida. Reintente." << COLOR_RST << endl;
                 Formatos::pausar();
-                break;
         }
-
     } while (opcionPrincipal != '6');
 }
 
+/* ========================================================================
+    SUBMENÚS POR DOMINIO (Delegación de Responsabilidades)
+   ======================================================================== */
+
 void Interfaz::menuProductos(Tienda& tienda) {
-    int opP = -1;
+    int op = -1;
     do {
-        system("cls");
-        cout << endl << AZUL << NEG;
-        cout << "  =========================================" << endl;
-        cout << "      GESTION DE PRODUCTOS               " << endl;
-        cout << "  =========================================" << endl;
-        cout << RST << endl;
+        mostrarEncabezado("MODULO: GESTION DE PRODUCTOS");
+        cout << "  1. Registrar entrada de producto" << endl;
+        cout << "  2. Buscar por ID especifico"       << endl;
+        cout << "  3. Actualizar precios o stock"     << endl;
+        cout << "  4. Dar de baja (Eliminacion logica)" << endl;
+        cout << "  5. Ver inventario general"         << endl;
+        cout << "  0. Volver al menu anterior"        << endl;
 
-        cout << "  " << CIAN << "1." << RST << " Registrar nuevo producto"   << endl;
-        cout << "  " << CIAN << "2." << RST << " Buscar producto"             << endl;
-        cout << "  " << CIAN << "3." << RST << " Editar producto"             << endl;
-        cout << "  " << CIAN << "4." << RST << " Ajustar stock manualmente"  << endl;
-        cout << "  " << CIAN << "5." << RST << " Eliminar producto"           << endl;
-        cout << "  " << CIAN << "6." << RST << " Listar todos los productos" << endl;
-        cout << "  " << ROJO  << "0." << RST << " Volver al menu principal"   << endl;
+        op = Formatos::leerEntero("\n  Seleccione operacion: ", 0, 5);
 
-        cout << endl;
-        opP = Formatos::leerEntero("  Seleccione: ", 0, 6);
-        cout << endl;
-
-        // Delegamos la acción al módulo correspondiente
-        if      (opP == 1) registrarProducto(tienda);
-        else if (opP == 2) buscarProducto(tienda);
-        else if (opP == 3) actualizarProducto(tienda);
-        else if (opP == 4) ajusteStockProducto(tienda);
-        else if (opP == 5) eliminarProducto(tienda);
-        else if (opP == 6) listarProductos(tienda);
-
-        if (opP != 0) Formatos::pausar();
-
-    } while (opP != 0);
+        switch (op) {
+            case 1: registrarProducto(tienda); break;
+            case 2: buscarProducto(tienda); break;
+            case 3: actualizarProducto(tienda); break;
+            case 4: eliminarProducto(tienda); break;
+            case 5: listarProductos(tienda); break;
+        }
+        if (op != 0) Formatos::pausar();
+    } while (op != 0);
 }
 
 void Interfaz::menuProveedores(Tienda& tienda) {
-    int opProv = -1;
+    int op = -1;
     do {
-        system("cls");
-        cout << endl << AZUL << NEG;
-        cout << "  =========================================" << endl;
-        cout << "      GESTION DE PROVEEDORES             " << endl;
-        cout << "  =========================================" << endl;
-        cout << RST << endl;
+        mostrarEncabezado("MODULO: GESTION DE PROVEEDORES");
+        cout << "  1. Registrar nuevo proveedor" << endl;
+        cout << "  2. Buscar por ID"             << endl;
+        cout << "  3. Modificar informacion"     << endl;
+        cout << "  4. Eliminar proveedor"        << endl;
+        cout << "  5. Listado de contactos"      << endl;
+        cout << "  0. Volver al menu anterior"   << endl;
 
-        cout << "  " << CIAN << "1." << RST << " Registrar nuevo proveedor" << endl;
-        cout << "  " << CIAN << "2." << RST << " Buscar proveedor"          << endl;
-        cout << "  " << CIAN << "3." << RST << " Actualizar proveedor"      << endl;
-        cout << "  " << CIAN << "4." << RST << " Eliminar proveedor"        << endl;
-        cout << "  " << CIAN << "5." << RST << " Listar proveedores"        << endl;
-        cout << "  " << ROJO  << "0." << RST << " Volver al menu principal"  << endl;
+        op = Formatos::leerEntero("\n  Seleccione operacion: ", 0, 5);
 
-        cout << endl;
-        opProv = Formatos::leerEntero("  Seleccione: ", 0, 5);
-        cout << endl;
-
-        if      (opProv == 1) crearProveedor(tienda);
-        else if (opProv == 2) buscarProveedor(tienda);
-        else if (opProv == 3) actualizarProveedor(tienda);
-        else if (opProv == 4) eliminarProveedor(tienda);
-        else if (opProv == 5) listarProveedores(tienda);
-
-        if (opProv != 0) Formatos::pausar();
-
-    } while (opProv != 0);
+        switch (op) {
+            case 1: crearProveedor(tienda); break;
+            case 2: buscarProveedor(tienda); break;
+            case 3: actualizarProveedor(tienda); break;
+            case 4: eliminarProveedor(tienda); break;
+            case 5: listarProveedores(tienda); break;
+        }
+        if (op != 0) Formatos::pausar();
+    } while (op != 0);
 }
 
 void Interfaz::menuClientes(Tienda& tienda) {
-    int opCli = -1;
+    int op = -1;
     do {
-        system("cls");
-        cout << endl << AZUL << NEG;
-        cout << "  =========================================" << endl;
-        cout << "      GESTION DE CLIENTES               " << endl;
-        cout << "  =========================================" << endl;
-        cout << RST << endl;
+        mostrarEncabezado("MODULO: CARTERA DE CLIENTES");
+        cout << "  1. Afiliar nuevo cliente"     << endl;
+        cout << "  2. Consultar por ID"          << endl;
+        cout << "  3. Editar perfil de cliente"  << endl;
+        cout << "  4. Eliminar del sistema"      << endl;
+        cout << "  5. Ver base de datos"         << endl;
+        cout << "  0. Volver al menu anterior"   << endl;
 
-        cout << "  " << CIAN << "1." << RST << " Registrar nuevo cliente"   << endl;
-        cout << "  " << CIAN << "2." << RST << " Buscar cliente"             << endl;
-        cout << "  " << CIAN << "3." << RST << " Actualizar datos"           << endl;
-        cout << "  " << CIAN << "4." << RST << " Listar todos los clientes" << endl;
-        cout << "  " << CIAN << "5." << RST << " Eliminar cliente"           << endl;
-        cout << "  " << ROJO  << "0." << RST << " Volver al menu principal"  << endl;
+        op = Formatos::leerEntero("\n  Seleccione operacion: ", 0, 5);
 
-        cout << endl;
-        opCli = Formatos::leerEntero("  Seleccione: ", 0, 5);
-        cout << endl;
-
-        if      (opCli == 1) crearCliente(tienda);
-        else if (opCli == 2) buscarCliente(tienda);
-        else if (opCli == 3) actualizarCliente(tienda);
-        else if (opCli == 4) listarClientes(tienda);
-        else if (opCli == 5) eliminarCliente(tienda);
-
-        if (opCli != 0) Formatos::pausar();
-
-    } while (opCli != 0);
+        switch (op) {
+            case 1: crearCliente(tienda); break;
+            case 2: buscarCliente(tienda); break;
+            case 3: actualizarCliente(tienda); break;
+            case 4: eliminarCliente(tienda); break;
+            case 5: listarClientes(tienda); break;
+        }
+        if (op != 0) Formatos::pausar();
+    } while (op != 0);
 }
 
 void Interfaz::menuTransacciones(Tienda& tienda) {
-    int opT = -1;
+    int op = -1;
     do {
-        system("cls");
-        cout << endl << AZUL << NEG;
-        cout << "  =========================================" << endl;
-        cout << "      GESTION DE TRANSACCIONES           " << endl;
-        cout << "  =========================================" << endl;
-        cout << RST << endl;
+        mostrarEncabezado("MODULO: MOVIMIENTOS Y VENTAS");
+        cout << "  1. Nueva Venta a Cliente"      << endl;
+        cout << "  2. Nueva Compra a Proveedor"   << endl;
+        cout << "  3. Ver historial de ventas"    << endl;
+        cout << "  4. Ver historial de compras"   << endl;
+        cout << "  0. Volver al menu anterior"    << endl;
 
-        cout << "  " << CIAN  << "1." << RST << " Registrar Compra (a Proveedor)" << endl;
-        cout << "  " << CIAN  << "2." << RST << " Registrar Venta (a Cliente)"    << endl;
-        cout << "  " << CIAN  << "3." << RST << " Buscar Transacciones"           << endl;
-        cout << "  " << CIAN  << "4." << RST << " Listar Transacciones"           << endl;
-        cout << "  " << ROJO  << "5." << RST << " Cancelar Transaccion"           << endl;
-        cout << "  " << ROJO  << "0." << RST << " Volver al menu principal"       << endl;
+        op = Formatos::leerEntero("\n  Seleccione operacion: ", 0, 4);
 
-        cout << endl;
-        opT = Formatos::leerEntero("  Seleccione: ", 0, 5);
-        cout << endl;
-
-        if      (opT == 1) registrarCompraBinaria(tienda);
-        else if (opT == 2) registrarVentaBinaria(tienda);
-        else if (opT == 3) buscarTransacciones(tienda);
-        else if (opT == 4) listarTransacciones(tienda);
-        else if (opT == 5) cancelarTransaccion(tienda);
-
-        if (opT != 0) Formatos::pausar();
-
-    } while (opT != 0);
+        switch (op) {
+            case 1: registrarVenta(tienda); break;
+            case 2: registrarCompra(tienda); break;
+            case 3: listarTransaccionesVenta(tienda); break;
+            case 4: listarTransaccionesCompra(tienda); break;
+        }
+        if (op != 0) Formatos::pausar();
+    } while (op != 0);
 }
 
 void Interfaz::menuMantenimiento(Tienda& tienda) {
-    int opM = -1;
+    int op = -1;
     do {
-        system("cls");
-        cout << endl << MAGEN << NEG;
-        cout << "  =========================================" << endl;
-        cout << "      MANTENIMIENTO Y REPORTES           " << endl;
-        cout << "  =========================================" << endl;
-        cout << RST << endl;
+        mostrarEncabezado("MODULO: REPORTES Y SISTEMA");
+        cout << "  1. Reporte de Stock Critico"     << endl;
+        cout << "  2. Balance de Transacciones"      << endl;
+        cout << "  3. Verificar Archivos Binarios"   << endl;
+        cout << "  0. Volver al menu anterior"       << endl;
 
-        cout << "  " << MAGEN << "1." << RST << " Verificar Integridad Referencial" << endl;
-        cout << "  " << MAGEN << "2." << RST << " Crear Respaldo (Backup)"          << endl;
-        cout << "  " << MAGEN << "3." << RST << " Reporte de Stock Critico"         << endl;
-        cout << "  " << MAGEN << "4." << RST << " Historial Detallado de Cliente"   << endl;
-        cout << "  " << ROJO   << "0." << RST << " Volver al menu principal"        << endl;
+        op = Formatos::leerEntero("\n  Seleccione reporte: ", 0, 3);
 
-        cout << endl;
-        opM = Formatos::leerEntero("  Seleccione: ", 0, 4);
-        cout << endl;
-
-        if      (opM == 1) verificarIntegridadReferencial();
-        else if (opM == 2) crearBackup();
-        else if (opM == 3) reporteStockCritico(tienda);
-        else if (opM == 4) historialDetalladoCliente(tienda);
-
-        if (opM != 0) Formatos::pausar();
-
-    } while (opM != 0);
+        switch (op) {
+            case 1: productosStockCritico(tienda); break;
+            case 2: balanceGeneral(tienda); break;
+            case 3: GestorArchivos::inicializarSistemaArchivos(); break;
+        }
+        if (op != 0) Formatos::pausar();
+    } while (op != 0);
 }
