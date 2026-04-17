@@ -1,4 +1,5 @@
-#include "Producto.hpp" 
+#include "Producto.hpp"
+#include "../Proveedores/Proveedores.hpp" // Súbelo aquí
 #include "operacionesProductos.hpp"
 #include "../Persistencia/Constantes.hpp"
 #include "../Persistencia/GestorArchivos.hpp"
@@ -28,54 +29,67 @@ using namespace std;
  * registrarProducto
  * Flujo de captura con asignacion de ID desde la Tienda.
  */
+/*
+ * registrarProducto
+ * Valida la existencia del proveedor, solicita datos y persiste el producto
+ * en el archivo binario.
+ */
 void registrarProducto(Tienda& tienda) {
     Formatos::limpiarPantalla();
-    cout << CIAN << NEG << "=== [ SISTEMA DE INVENTARIO : REGISTRO ] ===" << RST << endl;
+    cout << "=== [ SISTEMA DE INVENTARIO : REGISTRO ] ===" << endl;
 
-    char nombre[Constantes::TAM_NOMBRE];
-    char codigo[Constantes::TAM_CODIGO];
-    char desc[Constantes::TAM_DESCRIPCION];
-    float precio;
-    int stock, stockMin, idProv;
+    // 1. Validar Proveedor
+    int idProv = Formatos::leerEntero("\n > ID del Proveedor asociado: ", 1, 999);
+    ArchivoHeader headerProv = GestorArchivos::leerHeader(Constantes::ARCHIVO_PROVEEDORES);
+    bool proveedorExiste = false;
 
-    // 1. CAPTURA DE DATOS USANDO UTILIDADES
-    cout << "\n > Ingrese Nombre del Producto: ";
-    Formatos::limpiarBuffer();
-    cin.getline(nombre, Constantes::TAM_NOMBRE);
-
-    cout << " > Codigo de Barras/Referencia: ";
-    cin.getline(codigo, Constantes::TAM_CODIGO);
-
-    idProv = Formatos::leerEntero(" > ID del Proveedor asociado: ", 1, 999);
-    precio = Formatos::leerFloat(" > Precio de Venta (unitario): ", 0.01, 100000.0);
-    stock = Formatos::leerEntero(" > Stock Inicial en almacen: ", 0, 10000);
-    stockMin = Formatos::leerEntero(" > Nivel de Stock Minimo (Alerta): ", 1, 500);
-
-    cout << " > Descripcion breve: ";
-    Formatos::limpiarBuffer();
-    cin.getline(desc, Constantes::TAM_DESCRIPCION);
-
-    // 2. CREACION Y CONFIGURACION DE LA ENTIDAD
-    Producto nuevo(nombre, codigo, desc, idProv, precio, stock, stockMin);
-    
-    // Asignamos el ID actual de la tienda y aumentamos el contador
-    nuevo.setId(tienda.generarIdProducto());
-
-    // 3. PERSISTENCIA USANDO TEMPLATES
-    if (nuevo.esDatosCompletos()) {
-        if (GestorArchivos::guardarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, nuevo)) {
-            cout << "\n" << VERDE << "[EXITO] Producto ID " << nuevo.getId() 
-                 << " guardado correctamente." << RST << endl;
-            
-            // IMPORTANTE: Guardamos el estado de la tienda para no perder el contador de ID
-            GestorArchivos::actualizarRegistro<Tienda>(Constantes::ARCHIVO_TIENDA, 0, tienda);
-        } else {
-            cout << "\n" << ROJO << "[ERROR] Fallo al escribir en productos.bin" << RST << endl;
+    // Solo entramos al bucle si hay registros
+    for (int i = 0; i < headerProv.cantidadRegistros; i++) {
+    Proveedor provAux;
+    if (GestorArchivos::leerRegistroPorIndice<Proveedor>(Constantes::ARCHIVO_PROVEEDORES, i, provAux)) {
+        if (provAux.getId() == idProv && !provAux.isEliminado()) {
+            proveedorExiste = true;
+            break;
         }
-    } else {
-        cout << "\n" << ROJO << "[ERROR] Datos invalidos segun reglas de negocio." << RST << endl;
+    }
+}
+
+    if (!proveedorExiste) {
+        cout << "\n [!] ERROR: El Proveedor con ID " << idProv << " no existe." << endl;
+        cout << " [!] Debe registrar el proveedor primero en el Modulo de Proveedores." << endl;
+        Formatos::pausar();
+        return; 
     }
 
+    // 2. Recolectar datos del Producto
+    string nombreStr, codigoStr, descStr;
+    cout << " > Ingrese Nombre del Producto: "; cin >> nombreStr;
+    cout << " > Codigo de Barras/Referencia: "; cin >> codigoStr;
+    float precio = Formatos::leerFloat(" > Precio de Venta (unitario): ", 0.01, 999999);
+    int stock = Formatos::leerEntero(" > Stock Inicial en almacen: ", 0, 10000);
+    int stockMin = Formatos::leerEntero(" > Nivel de Stock Minimo (Alerta): ", 1, 500);
+    cout << " > Descripcion breve: "; cin >> descStr;
+
+    // 3. Crear el objeto con el ID automatico
+    int nuevoId = tienda.generarIdProducto();
+    Producto nuevo(
+    nombreStr.c_str(), 
+    codigoStr.c_str(), 
+    descStr.c_str(), 
+    nuevoId, 
+    precio, 
+    stock, 
+    stockMin
+);
+
+    // 4. Intentar guardar
+    if (GestorArchivos::guardarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, nuevo)) {
+        cout << "\n [ OK ] Producto registrado exitosamente con ID: " << nuevoId << endl;
+    } else {
+        // Si entra aqui, es porque la ruta en Constantes::ARCHIVO_PRODUCTOS es invalida
+        cout << "\n [ERROR] Fallo al escribir en " << Constantes::ARCHIVO_PRODUCTOS << endl;
+        cout << " Verifique que la carpeta de datos exista." << endl;
+    }
     Formatos::pausar();
 }
 
@@ -109,40 +123,160 @@ void listarProductos(Tienda& tienda) {
 }
 
 /*
+ * actualizarProducto
+ * Busca un producto por ID y permite modificar su precio o stock.
+ * Guarda los cambios directamente en el archivo.
+ */
+void actualizarProducto(Tienda& tienda) {
+    Formatos::limpiarPantalla();
+    cout << "=== [ EDITAR / ACTUALIZAR PRODUCTO ] ===" << endl;
+    
+    int idBusca = Formatos::leerEntero(" Ingrese el ID del producto a modificar: ", 1, 9999);
+    
+    Producto p;
+    int i = 0;
+    bool encontrado = false;
+
+    // Buscamos el registro en el archivo
+    while (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+        if (p.getId() == idBusca && !p.isEliminado()) {
+            encontrado = true;
+            
+            Formatos::limpiarPantalla();
+            cout << "=== [ PRODUCTO ENCONTRADO ] ===" << endl;
+            p.mostrarInformacionCompleta();
+            cout << "-------------------------------------------" << endl;
+            
+            cout << " ¿Que desea modificar?" << endl;
+            cout << " 1. Precio" << endl;
+            cout << " 2. Stock" << endl;
+            cout << " 3. Ambos" << endl;
+            cout << " 0. Cancelar" << endl;
+            int subOp = Formatos::leerEntero(" Seleccione: ", 0, 3);
+
+            if (subOp == 0) return;
+
+            if (subOp == 1 || subOp == 3) {
+                float nuevoPrecio = Formatos::leerFloat(" Nuevo Precio: ", 0.01, 1000000);
+                p.setPrecio(nuevoPrecio);
+            }
+
+            if (subOp == 2 || subOp == 3) {
+                int nuevoStock = Formatos::leerEntero(" Nuevo Stock: ", 0, 10000);
+                p.setStock(nuevoStock);
+            }
+
+            // Guardamos los cambios en la misma posicion 'i'
+            if (GestorArchivos::actualizarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+                cout << "\n[ OK ] Producto actualizado exitosamente." << endl;
+            } else {
+                cout << "\n[ ERROR ] No se pudo actualizar el archivo." << endl;
+            }
+            break;
+        }
+        i++;
+    }
+
+    if (!encontrado) {
+        cout << "\n[ ! ] El ID ingresado no existe o el producto esta eliminado." << endl;
+    }
+    
+    Formatos::pausar();
+}
+
+/*
+ * menuProductos
+ * Interfaz de usuario para el módulo de inventario.
+ */
+void menuProductos(Tienda& tienda) {
+    int op = -1;
+    do {
+        Formatos::limpiarPantalla();
+        cout << "==========================================================" << endl;
+        cout << " >>>           GESTION DE PRODUCTOS           <<< " << endl;
+        cout << "==========================================================" << endl;
+        cout << "\n 1. Registrar nuevo producto" << endl;
+        cout << " 2. Buscar producto" << endl;
+        cout << " 3. Editar producto (Actualizar)" << endl;
+        cout << " 4. Reporte de Stock Critico" << endl; // Cambié el orden para que coincida con tus funciones
+        cout << " 5. Eliminar producto" << endl;
+        cout << " 6. Listar todos los productos" << endl;
+        cout << " 0. Volver al menu principal" << endl;
+        
+        op = Formatos::leerEntero("\n Seleccione: ", 0, 6);
+
+        switch (op) {
+            case 1: registrarProducto(tienda); break;
+            case 2: buscarProducto(tienda); break;
+            case 3: actualizarProducto(tienda); break;
+            case 4: reporteStockCritico(tienda); break;
+            case 5: eliminarProducto(tienda); break;
+            case 6: listarProductos(tienda); break;
+            case 0: return; // Sale del bucle y vuelve al main
+        }
+    } while (op != 0);
+}
+/*
  * eliminarProducto
- * Aplica el borrado logico (encapsulamiento de estado).
+ * Cambia el estado del producto a eliminado (borrado logico).
  */
 void eliminarProducto(Tienda& tienda) {
     Formatos::limpiarPantalla();
-    cout << ROJO << NEG << "=== [ ELIMINAR PRODUCTO (BORRADO LOGICO) ] ===" << RST << endl;
+    cout << "=== [ ELIMINAR PRODUCTO ] ===" << endl;
+    int idElim = Formatos::leerEntero(" ID del producto a eliminar: ", 1, 9999);
 
-    int idTarget = Formatos::leerEntero("\n > Ingrese el ID del producto a dar de baja: ", 1, 9999);
+    Producto p;
+    int i = 0;
+    bool exito = false;
 
-    // Buscamos el registro en el archivo binario
-    int indice = GestorArchivos::buscarIndicePorID<Producto>(Constantes::ARCHIVO_PRODUCTOS, idTarget);
-
-    if (indice != -1) {
-        Producto temp;
-        GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, indice, temp);
-
-        // Verificamos si ya estaba eliminado
-        if(temp.isEliminado()) {
-            cout << AMARI << "\n[INFO] El producto ya se encuentra inactivo." << RST << endl;
-        } else {
-            cout << "\n Confirmar eliminacion de: " << NEG << temp.getNombre() << RST << " (s/n): ";
-            char confirm;
-            cin >> confirm;
-
-            if (confirm == 's' || confirm == 'S') {
-                temp.setEliminado(true); // Cambiamos estado interno
-                
-                if (GestorArchivos::actualizarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, indice, temp)) {
-                    cout << VERDE << "\n[OK] Producto desactivado exitosamente." << RST << endl;
-                }
+    while (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+        if (p.getId() == idElim && !p.isEliminado()) {
+            p.setEliminado(true);
+            if (GestorArchivos::actualizarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+                cout << "\n[ OK ] Producto eliminado correctamente." << endl;
+                exito = true;
             }
+            break;
         }
-    } else {
-        cout << "\n" << ROJO << "[ERROR] ID " << idTarget << " no encontrado." << RST << endl;
+        i++;
+    }
+
+    if (!exito) cout << "\n[ ! ] No se pudo encontrar el producto." << endl;
+    Formatos::pausar();
+}
+
+/*
+ * buscarProducto
+ * Solicita un ID al usuario, recorre el archivo y muestra la ficha 
+ * detallada si el producto existe y no esta eliminado.
+ */
+void buscarProducto(Tienda& tienda) {
+    Formatos::limpiarPantalla();
+    cout << "==========================================================" << endl;
+    cout << " >>>              BUSCAR PRODUCTO POR ID              <<< " << endl;
+    cout << "==========================================================" << endl;
+
+    int idBusca = Formatos::leerEntero("\n Ingrese el ID del producto: ", 1, 9999);
+    
+    Producto p;
+    int i = 0;
+    bool encontrado = false;
+
+    // Recorremos el archivo registro por registro
+    while (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+        // Verificamos si es el ID que buscamos y que no este borrado logicamente
+        if (p.getId() == idBusca && !p.isEliminado()) {
+            encontrado = true;
+            Formatos::limpiarPantalla();
+            cout << ">>> PRODUCTO ENCONTRADO <<<" << endl;
+            p.mostrarInformacionCompleta(); // Usamos el metodo de la clase Producto
+            break;
+        }
+        i++;
+    }
+
+    if (!encontrado) {
+        cout << "\n [!] El producto con ID " << idBusca << " no existe o fue eliminado." << endl;
     }
 
     Formatos::pausar();

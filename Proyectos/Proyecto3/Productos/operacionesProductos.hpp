@@ -47,4 +47,8 @@ void eliminarProducto(Tienda& tienda);
  */
 void reporteStockCritico(Tienda& tienda);
 
+void menuProductos(Tienda& tienda);
+
+void actualizarProducto(Tienda& tienda);
+
 #endif /* OPERACIONES_PRODUCTOS_HPP */
