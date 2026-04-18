@@ -1,5 +1,6 @@
 #include <iostream>
 #include "Tienda/Tienda.hpp"
+#include "Proveedores/Proveedores.hpp"
 #include "Persistencia/Constantes.hpp"
 #include "Persistencia/GestorArchivos.hpp"
 #include "Utilidades/Formatos.hpp"
@@ -20,6 +21,24 @@ void guardarTienda(Tienda& t) {
 }
 
 int main() {
+
+    // 1. Crear un proveedor manual
+    // El constructor pide: nombre, rif, tel, mail, dir, contacto
+    
+    Proveedor p1("Proveedor Mayorista", "J-12345678", "0414-1112233", "ventas@mayor.com", "Calle 1", "Juan Perez");
+    p1.setId(1); 
+    p1.setEliminado(false); // Aseguramos que no este marcado como borrado
+
+    // 2. ¡ESTA ES LA PARTE QUE FALTA! Guardarlo en el archivo
+    // Solo lo guardamos si el archivo esta vacio o no existe para no repetir
+    ArchivoHeader headerProv = GestorArchivos::leerHeader(Constantes::ARCHIVO_PROVEEDORES);
+    if (headerProv.cantidadRegistros == 0) {
+        if (GestorArchivos::guardarRegistro<Proveedor>(Constantes::ARCHIVO_PROVEEDORES, p1)) {
+            cout << "[ OK ] Proveedor semilla (ID 1) guardado en el archivo." << endl;
+        }
+    }
+
+    
     // 1. INICIALIZACIÓN: Creamos los archivos .bin si no existen
     // Esto ejecutará el ofstream que está dentro de inicializarArchivo
     if (!GestorArchivos::inicializarSistemaArchivos()) {

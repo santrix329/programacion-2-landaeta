@@ -21,18 +21,10 @@ using namespace std;
 #define AMARI   "\033[33m"
 #define CIAN    "\033[36m"
 
-/* ========================================================================
-    IMPLEMENTACION DE FUNCIONES DE NEGOCIO
-   ======================================================================== */
-
 /*
  * registrarProducto
- * Flujo de captura con asignacion de ID desde la Tienda.
- */
-/*
- * registrarProducto
- * Valida la existencia del proveedor, solicita datos y persiste el producto
- * en el archivo binario.
+ * Solicita los datos de un nuevo producto, valida la existencia del proveedor
+ * y guarda el registro en el archivo binario con un ID autoincremental.
  */
 void registrarProducto(Tienda& tienda) {
     Formatos::limpiarPantalla();
@@ -121,66 +113,67 @@ void listarProductos(Tienda& tienda) {
     
     Formatos::pausar();
 }
-
 /*
  * actualizarProducto
- * Busca un producto por ID y permite modificar su precio o stock.
- * Guarda los cambios directamente en el archivo.
+ * Permite modificar el precio o stock de un producto existente.
+ * Usa el header para controlar el limite de busqueda en el archivo.
  */
 void actualizarProducto(Tienda& tienda) {
     Formatos::limpiarPantalla();
     cout << "=== [ EDITAR / ACTUALIZAR PRODUCTO ] ===" << endl;
-    
+
     int idBusca = Formatos::leerEntero(" Ingrese el ID del producto a modificar: ", 1, 9999);
-    
+
     Producto p;
-    int i = 0;
     bool encontrado = false;
 
-    // Buscamos el registro en el archivo
-    while (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
-        if (p.getId() == idBusca && !p.isEliminado()) {
-            encontrado = true;
-            
-            Formatos::limpiarPantalla();
-            cout << "=== [ PRODUCTO ENCONTRADO ] ===" << endl;
-            p.mostrarInformacionCompleta();
-            cout << "-------------------------------------------" << endl;
-            
-            cout << " ¿Que desea modificar?" << endl;
-            cout << " 1. Precio" << endl;
-            cout << " 2. Stock" << endl;
-            cout << " 3. Ambos" << endl;
-            cout << " 0. Cancelar" << endl;
-            int subOp = Formatos::leerEntero(" Seleccione: ", 0, 3);
+    // LEER HEADER
+    ArchivoHeader headerProd = GestorArchivos::leerHeader(Constantes::ARCHIVO_PRODUCTOS);
 
-            if (subOp == 0) return;
+    // CAMBIO DE WHILE A FOR
+    for (int i = 0; i < headerProd.cantidadRegistros; i++) {
+        if (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+            if (p.getId() == idBusca && !p.isEliminado()) {
+                encontrado = true;
+                
+                Formatos::limpiarPantalla();
+                cout << "=== [ PRODUCTO ENCONTRADO ] ===" << endl;
+                p.mostrarInformacionCompleta();
+                cout << "---------------------------------------" << endl;
 
-            if (subOp == 1 || subOp == 3) {
-                float nuevoPrecio = Formatos::leerFloat(" Nuevo Precio: ", 0.01, 1000000);
-                p.setPrecio(nuevoPrecio);
+                cout << " ¿Que desea modificar?" << endl;
+                cout << " 1. Precio" << endl;
+                cout << " 2. Stock" << endl;
+                cout << " 3. Ambos" << endl;
+                cout << " 0. Cancelar" << endl;
+                int subOp = Formatos::leerEntero(" Seleccione: ", 0, 3);
+
+                if (subOp == 0) return;
+
+                if (subOp == 1 || subOp == 3) {
+                    float nuevoPrecio = Formatos::leerFloat(" Nuevo Precio: ", 0.01, 1000000);
+                    p.setPrecio(nuevoPrecio);
+                }
+
+                if (subOp == 2 || subOp == 3) {
+                    int nuevoStock = Formatos::leerEntero(" Nuevo Stock: ", 0, 10000);
+                    p.setStock(nuevoStock);
+                }
+
+                if (GestorArchivos::actualizarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+                    cout << "\n[ OK ] Producto actualizado exitosamente." << endl;
+                } else {
+                    cout << "\n[ ERROR ] No se pudo actualizar el archivo." << endl;
+                }
+                break; // Salimos del for al encontrarlo
             }
-
-            if (subOp == 2 || subOp == 3) {
-                int nuevoStock = Formatos::leerEntero(" Nuevo Stock: ", 0, 10000);
-                p.setStock(nuevoStock);
-            }
-
-            // Guardamos los cambios en la misma posicion 'i'
-            if (GestorArchivos::actualizarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
-                cout << "\n[ OK ] Producto actualizado exitosamente." << endl;
-            } else {
-                cout << "\n[ ERROR ] No se pudo actualizar el archivo." << endl;
-            }
-            break;
         }
-        i++;
     }
 
     if (!encontrado) {
         cout << "\n[ ! ] El ID ingresado no existe o el producto esta eliminado." << endl;
     }
-    
+
     Formatos::pausar();
 }
 
@@ -220,63 +213,81 @@ void menuProductos(Tienda& tienda) {
  * eliminarProducto
  * Cambia el estado del producto a eliminado (borrado logico).
  */
+/*
+ * eliminarProducto
+ * Realiza una eliminacion logica del producto cambiando su estado.
+ * El uso del for previene que el programa se cuelgue con archivos vacios.
+ */
 void eliminarProducto(Tienda& tienda) {
     Formatos::limpiarPantalla();
     cout << "=== [ ELIMINAR PRODUCTO ] ===" << endl;
     int idElim = Formatos::leerEntero(" ID del producto a eliminar: ", 1, 9999);
 
     Producto p;
-    int i = 0;
     bool exito = false;
 
-    while (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
-        if (p.getId() == idElim && !p.isEliminado()) {
-            p.setEliminado(true);
-            if (GestorArchivos::actualizarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
-                cout << "\n[ OK ] Producto eliminado correctamente." << endl;
-                exito = true;
+    // LEER HEADER
+    ArchivoHeader headerProd = GestorArchivos::leerHeader(Constantes::ARCHIVO_PRODUCTOS);
+
+    // CAMBIO DE WHILE A FOR
+    for (int i = 0; i < headerProd.cantidadRegistros; i++) {
+        if (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+            if (p.getId() == idElim && !p.isEliminado()) {
+                p.setEliminado(true); // Eliminacion logica
+                
+                if (GestorArchivos::actualizarRegistro<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+                    cout << "\n[ OK ] Producto eliminado correctamente." << endl;
+                    exito = true;
+                }
+                break;
             }
-            break;
         }
-        i++;
     }
 
-    if (!exito) cout << "\n[ ! ] No se pudo encontrar el producto." << endl;
+    if (!exito) {
+        cout << "\n[ ! ] No se pudo encontrar el producto." << endl;
+    }
+
     Formatos::pausar();
 }
 
 /*
  * buscarProducto
- * Solicita un ID al usuario, recorre el archivo y muestra la ficha 
- * detallada si el producto existe y no esta eliminado.
+ * Busca un producto por su ID en el archivo binario.
+ * Utiliza el header para saber la cantidad exacta de registros y evitar bucles infinitos.
  */
 void buscarProducto(Tienda& tienda) {
     Formatos::limpiarPantalla();
-    cout << "==========================================================" << endl;
-    cout << " >>>              BUSCAR PRODUCTO POR ID              <<< " << endl;
-    cout << "==========================================================" << endl;
+    cout << "======================================================" << endl;
+    cout << " >>>              BUSCAR PRODUCTO POR ID            <<<" << endl;
+    cout << "======================================================" << endl;
 
     int idBusca = Formatos::leerEntero("\n Ingrese el ID del producto: ", 1, 9999);
-    
+
     Producto p;
-    int i = 0;
     bool encontrado = false;
 
-    // Recorremos el archivo registro por registro
-    while (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
-        // Verificamos si es el ID que buscamos y que no este borrado logicamente
-        if (p.getId() == idBusca && !p.isEliminado()) {
-            encontrado = true;
-            Formatos::limpiarPantalla();
-            cout << ">>> PRODUCTO ENCONTRADO <<<" << endl;
-            p.mostrarInformacionCompleta(); // Usamos el metodo de la clase Producto
-            break;
+    // 1. Leemos el header para saber cuántos productos hay realmente
+    ArchivoHeader headerProd = GestorArchivos::leerHeader(Constantes::ARCHIVO_PRODUCTOS);
+
+    // 2. Usamos el ciclo FOR en lugar del WHILE
+    for (int i = 0; i < headerProd.cantidadRegistros; i++) {
+        // Solo verificamos si la lectura fue exitosa
+        if (GestorArchivos::leerRegistroPorIndice<Producto>(Constantes::ARCHIVO_PRODUCTOS, i, p)) {
+            if (p.getId() == idBusca && !p.isEliminado()) {
+                encontrado = true;
+                Formatos::limpiarPantalla();
+                cout << ">>> PRODUCTO ENCONTRADO <<<" << endl;
+                p.mostrarInformacionCompleta(); 
+                break;
+            }
         }
-        i++;
     }
 
     if (!encontrado) {
         cout << "\n [!] El producto con ID " << idBusca << " no existe o fue eliminado." << endl;
+        Formatos::pausar(); // <- ¡IMPORTANTE! Pausamos ANTES de hacer el return
+        return;
     }
 
     Formatos::pausar();
